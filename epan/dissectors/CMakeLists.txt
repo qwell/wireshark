@@ -553,6 +553,7 @@ set(DISSECTOR_SRC
 	packet-elcom.c
 	packet-elmi.c
 	packet-enc.c
+	packet-enet.c
 	packet-enip.c
 	packet-enrp.c
 	packet-enttec.c
