@@ -240,6 +240,7 @@ FILE_DISSECTOR_SRC = \
 # Dissectors without warnings.
 #
 DISSECTOR_SRC = \
+	packet-0ad.c	\
 	packet-2dparityfec.c	\
 	packet-3com-njack.c	\
 	packet-3com-xns.c	\

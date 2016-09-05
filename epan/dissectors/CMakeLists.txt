@@ -219,6 +219,7 @@ set(DISSECTOR_SRC
 	file-pcap.c
 	file-pcapng.c
 	file-png.c
+	packet-0ad.c
 	packet-2dparityfec.c
 	packet-3com-njack.c
 	packet-3com-xns.c
