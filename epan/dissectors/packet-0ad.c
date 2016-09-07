@@ -40,6 +40,8 @@
 #define PS_PROTOCOL_VERSION_ALPHA_1_7		0x01010004
 #define PS_PROTOCOL_VERSION_ALPHA_8_18		0x01010005
 #define PS_PROTOCOL_VERSION_ALPHA_19		0x01010006
+#define PS_PROTOCOL_VERSION_ALPHA_20		0x01010011
+#define PS_PROTOCOL_VERSION_ALPHA_21		0x01010014
 
 /*
  * Custom serialization used for gamesetup and simulation commands.
@@ -103,6 +105,8 @@ static const value_string ProtocolVersion[] = {
 	{ PS_PROTOCOL_VERSION_ALPHA_1_7, "Alpha 1 to 7" },
 	{ PS_PROTOCOL_VERSION_ALPHA_8_18, "Alpha 8 to 18" },
 	{ PS_PROTOCOL_VERSION_ALPHA_19, "Alpha 19" },
+	{ PS_PROTOCOL_VERSION_ALPHA_20, "Alpha 20" },
+	{ PS_PROTOCOL_VERSION_ALPHA_21, "Alpha 21" },
 	{ 0, NULL }
 };
 
@@ -113,7 +117,10 @@ static const value_string ProtocolMagic[] = {
 	{ 0, NULL }
 };
 
-static const value_string NetMessageTypes_alpha18[] = {
+#define GAMEVERSION 20
+
+#if GAMEVERSION==18
+static const value_string NetMessageTypes[] = {
 	{ 0, "Invalid" },
 	{ 1, "Server Handshake" },
 	{ 2, "Client Handshake" },
@@ -137,6 +144,67 @@ static const value_string NetMessageTypes_alpha18[] = {
 	{ 20, "Simulation Command"},
 	{ 21, NULL }
 };
+#endif
+
+#if GAMEVERSION==19
+static const value_string NetMessageTypes[] = {
+	{ 0, "Invalid" },
+	{ 1, "Server Handshake" },
+	{ 2, "Client Handshake" },
+	{ 3, "Server Handshake Response" },
+	{ 4, "Authentication" },
+	{ 5, "Authentication Result" },
+	{ 6, "Chat" },
+	{ 7, "Ready" },
+	{ 8, "Game Setup" },
+	{ 9, "Player Assignment" },
+	{ 10, "File Transfer Request" },
+	{ 11, "File Transfer Response" },
+	{ 12, "File Transfer Data" },
+	{ 13, "File Transfer Acknowledge" },
+	{ 14, "Join Sync Start" },
+	{ 15, "Client Rejoined" },
+	{ 16, "Client Kicked" },
+	{ 17, "Loaded Game" },
+	{ 18, "Game Start" },
+	{ 19, "End Command Batch"},
+	{ 20, "Synchronization Check"},
+	{ 21, "Synchronization Error"},
+	{ 22, "Simulation Command"},
+	{ 21, NULL }
+};
+#endif
+
+#if GAMEVERSION==20
+static const value_string NetMessageTypes[] = {
+	{ 0, "Invalid" },
+	{ 1, "Server Handshake" },
+	{ 2, "Client Handshake" },
+	{ 3, "Server Handshake Response" },
+	{ 4, "Authentication" },
+	{ 5, "Authentication Result" },
+	{ 6, "Chat" },
+	{ 7, "Ready" },
+	{ 8, "Game Setup" },
+	{ 9, "Player Assignment" },
+	{ 10, "File Transfer Request" },
+	{ 11, "File Transfer Response" },
+	{ 12, "File Transfer Data" },
+	{ 13, "File Transfer Acknowledge" },
+	{ 14, "Join Sync Start" },
+	{ 15, "Client Rejoined" },
+	{ 16, "Client Kicked" },
+	{ 17, "Client Timeout" },
+	{ 18, "Client Performance" },
+	{ 19, "Loaded Game" },
+	{ 20, "Game Start" },
+	{ 21, "End Command Batch"},
+	{ 22, "Synchronization Check"},
+	{ 23, "Synchronization Error"},
+	{ 24, "Simulation Command"},
+	{ 21, NULL }
+};
+#endif
 
 static const value_string AuthenticationResult[] = {
 	{ 0, "Ok" },
@@ -151,12 +219,40 @@ static const value_string ReadyStatus[] = {
 };
 
 /* Taken from NetHost.h */
+#if GAMEVERSION==18
 static const value_string DisconnectReason[] = {
 	{ 0, "Unknown" },
-	{ 1, "Unexpected Shutdown" },
+	{ 1, "Host Quit" },
 	{ 2, "Incorrect Protocol Version" },
-	{ 3, "Already In Game" }
+	{ 3, "Game has started already" }
 };
+#endif
+
+#if GAMEVERSION==19
+static const value_string DisconnectReason[] = {
+	{ 0, "Unknown" },
+	{ 1, "Host quit" },
+	{ 2, "Incorrect protocol version" },
+	{ 3, "Game loading" },
+	{ 4, "Game has started already" },
+	{ 5, "Kicked" },
+	{ 6, "Banned" }
+};
+#endif
+
+#if GAMEVERSION==20
+static const value_string DisconnectReason[] = {
+	{ 0, "Unknown" },
+	{ 1, "Host quit" },
+	{ 2, "Incorrect protocol version" },
+	{ 3, "Game loading" },
+	{ 4, "Game has started already" },
+	{ 5, "Kicked" },
+	{ 6, "Banned" },
+	{ 7, "Playername in use" },
+	{ 8, "Server full" }
+};
+#endif
 
 static dissector_handle_t handle_0ad = NULL;
 static reassembly_table msg_fragment_table;
@@ -254,7 +350,7 @@ static hf_register_info hf[] = {
 	{ &hf_message_type,
 		{ "Message Type", "0ad.message_type",
 		FT_UINT8, BASE_DEC,
-		VALS(NetMessageTypes_alpha18), 0x0,
+		VALS(NetMessageTypes), 0x0,
 		"Message type of that packet.", HFILL }
 	},
 	{ &hf_script_type,
@@ -965,7 +1061,9 @@ dissect_0ad_disconnect(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_
 {
 	/* Disconnect Reason */
 	const guint32 disconnect_reason = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
-	const gchar *disconnect_reason_text = val_to_str(disconnect_reason, DisconnectReason, "Unknown (0x%02x)");
+	const gchar *disconnect_reason_text;
+
+	disconnect_reason_text = val_to_str(disconnect_reason, DisconnectReason, "Unknown (0x%02x)");
 	proto_tree_add_item(tree_0ad, hf_disconnect_reason, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
 
@@ -990,7 +1088,7 @@ static void
 dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad)
 {
 	const guint8 messageType = tvb_get_guint8(tvb, offset);
-	const gchar *messageTypeName = val_to_str(messageType, NetMessageTypes_alpha18, "Unknown (0x%02x)");
+	const gchar *messageTypeName = val_to_str(messageType, NetMessageTypes, "Unknown (0x%02x)");
 
 	/* Update info column */
 	/*col_clear(pinfo->cinfo, COL_INFO);*/
@@ -1010,6 +1108,7 @@ dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad
 	offset += 2;
 
 	/* Dissect specific message */
+	// TODO: support other versions
 	switch(messageType) {
 		case 1: dissect_0ad_handshake(tvb); break;
 		case 2: dissect_0ad_handshake(tvb); break;
