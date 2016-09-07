@@ -1,6 +1,6 @@
 /* packet-0ad.c
  *
- * Dissector for the realtime strategy game 0 A.D..
+ * Dissector for the realtime strategy game 0 A.D.
  * Copyright 2016, Alexander Heinsius
  *
  * Wireshark - Network traffic analyzer
@@ -22,66 +22,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-/* TODO: parse chat */
 /* TODO: typing the following filter produces a crash: 0ad.message_type=="authentication result" and 0ad.authentication_result_code!=1x */
 /* TODO: when using the same ett value for each layer, then all items will be expanded, if one is opened: https://ask.wireshark.org/questions/31356/how-to-get-all-tree-items-collapsed-as-default-in-gtk-version */
-
-/* Wireshark dissector for the free realtime strategy game 0 A. D.
- * Written august 2015, aims to support all versions up to alpha 19.
- */
 
 #include "config.h"
 
 #include <epan/conversation.h>
 #include <epan/packet.h>
 #include <epan/reassemble.h>
-
-/*
- * You can identify the the svn revision numbers of the different releases
- * You can find the revision numbers of the different releases in the
- * svn_revision.txt file of each build archive on http://releases.wildfiregames.com/
-#define PS_REVISION_PRE_ALPHA_1	07419
-#define PS_REVISION_PRE_ALPHA_2	07539
-#define PS_REVISION_PRE_ALPHA_3	07732
-#define PS_REVISION_ALPHA_01	07970
-#define PS_REVISION_ALPHA_02	08413
-#define PS_REVISION_ALPHA_03	08832
-#define PS_REVISION_ALPHA_04	09049
-#define PS_REVISION_ALPHA_05	09530
-#define PS_REVISION_ALPHA_06	09786
-#define PS_REVISION_ALPHA_07	10288
-#define PS_REVISION_ALPHA_08	10803
-#define PS_REVISION_ALPHA_09	11339
-#define PS_REVISION_ALPHA_10	11863
-#define PS_REVISION_ALPHA_11	12636
-#define PS_REVISION_ALPHA_12	12995
-#define PS_REVISION_ALPHA_13	13332
-#define PS_REVISION_ALPHA_14	13796
-#define PS_REVISION_ALPHA_15	14386
-#define PS_REVISION_ALPHA_16	15148
-#define PS_REVISION_ALPHA_17	15849
-#define PS_REVISION_ALPHA_18	16411
-*/
-
-/*
- * Version titles were introduced in version 8 and can be found on:
- * http://play0ad.com/?s=new+release&submit=Search
- *
- * The current version name is also defined in:
- * - binaries/data/mods/public/gui/pregame/mainmenu.xml
- * - binaries/data/mods/public/gui/session/top_panel/label.xml
-#define TITLE_ALPHA_8	"Haxāmaniš"
-#define TITLE_ALPHA_9	"Ides of March"
-#define TITLE_ALPHA_10	"Jhelum"
-#define TITLE_ALPHA_11	"Kronos"
-#define TITLE_ALPHA_12	"Loucetios"
-#define TITLE_ALPHA_13	"Magadha"
-#define TITLE_ALPHA_14	"Naukratis"
-#define TITLE_ALPHA_15	"Osiris"
-#define TITLE_ALPHA_16	"Patañjali"
-#define TITLE_ALPHA_17	"Quercus"
-#define TITLE_ALPHA_18	"Rhododactylos"
-*/
 
 /* The following constants are defined in NetMessages.h */
 #define PS_DEFAULT_PORT						0x5073		/* 'P', 's' (UDP Port 20595) */
@@ -91,7 +39,7 @@
 #define PS_PROTOCOL_VERSION_PRE_ALPHA_3		0x01010003
 #define PS_PROTOCOL_VERSION_ALPHA_1_7		0x01010004
 #define PS_PROTOCOL_VERSION_ALPHA_8_18		0x01010005
-#define PS_PROTOCOL_VERSION_ALPHA_19		0x01010006 /* TODO: will likely increase for a19 */
+#define PS_PROTOCOL_VERSION_ALPHA_19		0x01010006
 
 /*
  * Custom serialization used for gamesetup and simulation commands.
@@ -165,8 +113,6 @@ static const value_string ProtocolMagic[] = {
 	{ 0, NULL }
 };
 
-/* TODO: This will change in a19. */
-/* TODO: It has likely changed before, a17 should be supported too */
 static const value_string NetMessageTypes_alpha18[] = {
 	{ 0, "Invalid" },
 	{ 1, "Server Handshake" },
@@ -205,7 +151,6 @@ static const value_string ReadyStatus[] = {
 };
 
 /* Taken from NetHost.h */
-/* TODO: this has likely changed for different version */
 static const value_string DisconnectReason[] = {
 	{ 0, "Unknown" },
 	{ 1, "Unexpected Shutdown" },
@@ -1132,7 +1077,7 @@ static gboolean
 dissect_0ad_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
 	if (pinfo->srcport != PS_DEFAULT_PORT && pinfo->destport != PS_DEFAULT_PORT)
-	return FALSE;
+		return FALSE;
 
 	dissect_0ad(tvb, pinfo, tree, data);
 	return TRUE;
@@ -1142,7 +1087,7 @@ static void
 setup_dissector(void)
 {
 	reassembly_table_init(&msg_fragment_table, &addresses_reassembly_table_functions);
-	table_guid_username = g_hash_table_new(g_str_hash, g_str_equal);;
+	table_guid_username = g_hash_table_new(g_str_hash, g_str_equal);
 	table_packetNr = g_hash_table_new(g_direct_hash, g_direct_equal);
 	table_fileSize = g_hash_table_new(g_direct_hash, g_direct_equal);
 	table_totalSize = g_hash_table_new(g_direct_hash, g_direct_equal);
