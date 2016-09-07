@@ -64,7 +64,7 @@ static guint32 offset = 0;
 static proto_tree *enet_tree = NULL;
 
 static dissector_handle_t handle_data;
-//static heur_dissector_list_t heur_subdissector_list;
+static heur_dissector_list_t heur_subdissector_list;
 
 static reassembly_table msg_fragment_table;
 GHashTable *table_reassembled_sequenceIDs = NULL;
@@ -440,9 +440,9 @@ static const fragment_items msg_frag_items = {
 
 static void enet_dissect_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
-	//heur_dtbl_entry_t *hdtbl_entry;
+	heur_dtbl_entry_t *hdtbl_entry;
 
-	//if (!dissector_try_heuristic(heur_subdissector_list, tvb, pinfo, tree, &hdtbl_entry, NULL))
+	if (!dissector_try_heuristic(heur_subdissector_list, tvb, pinfo, tree, &hdtbl_entry, NULL))
 		call_dissector(handle_data, tvb, pinfo, tree);
 }
 
@@ -827,7 +827,7 @@ proto_register_enet(void)
 
 	register_dissector("enet", dissect_enet, proto_enet);
 
-//	heur_subdissector_list = register_heur_dissector_list("enet");
+	heur_subdissector_list = register_heur_dissector_list("enet", proto_enet);
 
 	proto_register_field_array(proto_enet, hf_enet, array_length(hf_enet));
 	proto_register_subtree_array(ett_enet, array_length(ett_enet));
@@ -841,9 +841,6 @@ proto_reg_handoff_enet(void)
 {
 	dissector_handle_t handle_enet = create_dissector_handle(dissect_enet, proto_enet);
 	dissector_add_for_decode_as("udp.port", handle_enet);
-
-	/* 0 A.D. uses enet on that port by default */
-	dissector_add_uint("udp.port", 20595, handle_enet);
 
 	handle_data = find_dissector("data");
 }
