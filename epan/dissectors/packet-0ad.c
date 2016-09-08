@@ -291,7 +291,6 @@ static gint hf_mean_rtt = -1;
 #endif
 
 #if GAMEVERSION >= 21
-static gint hf_assigned_player_id = -1;
 static gint hf_pause_flag = -1;
 #endif
 
@@ -489,12 +488,6 @@ static hf_register_info hf[] = {
 	},
 #endif
 #if GAMEVERSION >= 21
-	{ &hf_assigned_player_id,
-		{ "Player ID", "0ad.assigned_player_id",
-		FT_UINT8, BASE_DEC,
-		NULL, 0x0,
-		"States under which player ID the client given by the GUID will play.", HFILL }
-	},
 	{ &hf_pause_flag,
 		{ "Paused", "0ad.paused",
 		FT_BOOLEAN, 0,
@@ -945,7 +938,7 @@ dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
 
 	/* Player ID */
 	const guint playerID = tvb_get_guint8(tvb, offset);
-	proto_tree_add_item(tree_0ad, hf_assigned_player_id, tvb, offset, 1, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree_0ad, hf_player_id, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 
 	/* Update colum info */
