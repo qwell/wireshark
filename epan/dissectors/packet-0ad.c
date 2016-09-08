@@ -148,7 +148,7 @@ static const value_string ProtocolMagic[] = {
 #if GAMEVERSION <= 18
 #define COMMAND_OFFSET4 0
 #elif GAMEVERSION == 19
-#define COMMAND_OFFSET4 2;
+#define COMMAND_OFFSET4 2
 #elif GAMEVERSION == 20
 #define COMMAND_OFFSET4 4
 #else
@@ -929,6 +929,7 @@ dissect_0ad_gamesetup(tvbuff_t *tvb, proto_item *tree_item_0ad)
 	dissect_0ad_script_element(tvb, "0ad", "Gamesetup", tree_item_0ad, ENC_LITTLE_ENDIAN);
 }
 
+#if GAMEVERSION >= 21
 static void
 dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
 {
@@ -945,6 +946,8 @@ dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
 	if (strlen(user_guid) > 0)
 		col_append_fstr(pinfo->cinfo, COL_INFO, "%s -> %d", username, playerID);
 }
+#endif
+
 static void
 dissect_0ad_player_assignments(tvbuff_t *tvb, packet_info *pinfo)
 {
@@ -1272,7 +1275,6 @@ dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad
 		case 20 + COMMAND_OFFSET3: dissect_0ad_simulation_command(tvb, tree_item_0ad); break;
 		default: break;
 	}
-
 }
 
 static int
