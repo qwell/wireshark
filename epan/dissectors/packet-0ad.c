@@ -103,8 +103,8 @@ static const value_string ScriptTypes[] = {
 	{ SCRIPT_TYPE_OBJECT_MAP, "Object Map" },
 	{ SCRIPT_TYPE_OBJECT_SET, "Object Set" }
 };
-// ArrayBufferView subclasses (to avoid relying directly on the JSAPI enums)
-/*enum
+
+/*
 {
 	SCRIPT_TYPED_ARRAY_INT8 = 0,
 	SCRIPT_TYPED_ARRAY_UINT8 = 1,
@@ -884,9 +884,6 @@ dissect_0ad_authentication_result(tvbuff_t *tvb)
 static void
 dissect_0ad_chat(tvbuff_t *tvb, packet_info *pinfo)
 {
-	/* TODO: Differentiate incoming and outgoing chat messages */
-	/* In the latter case the GUID is null */
-
 	/* User GUID */
 	const gchar *user_guid = dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
 	const gchar *username = (const gchar*) g_hash_table_lookup(table_guid_username, (gpointer) g_strdup(user_guid));
@@ -919,8 +916,6 @@ dissect_0ad_ready(tvbuff_t *tvb, packet_info *pinfo)
 			col_append_fstr(pinfo->cinfo, COL_INFO, " %s (not ready)", username);
 	} else if(!readyStatus)
 		col_append_str(pinfo->cinfo, COL_INFO, " (not ready)");
-
-	/* TODO: show column info (name + ready state)*/
 }
 
 static void
