@@ -1109,8 +1109,8 @@ dissect_0ad_rejoined(tvbuff_t *tvb)
 static void
 dissect_0ad_kicked(tvbuff_t *tvb)
 {
-	/* User GUID */
-	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+	/* Username */
+	const gchar *username = dissect_0ad_wide_string(tvb, hf_username, tree_0ad, ENC_BIG_ENDIAN);
 
 	/* Ban boolean */
 	proto_tree_add_item(tree_0ad, hf_ban_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
