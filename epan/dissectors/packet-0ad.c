@@ -197,40 +197,25 @@ static const value_string ReadyStatus[] = {
 };
 
 /* Taken from NetHost.h */
-#if GAMEVERSION == 18
 static const value_string DisconnectReason[] = {
 	{ 0, "Unknown" },
 	{ 1, "Host Quit" },
 	{ 2, "Incorrect Protocol Version" },
+
+#if GAMEVERSION == 18
 	{ 3, "Game has started already" }
-};
-#endif
-
-#if GAMEVERSION == 19
-static const value_string DisconnectReason[] = {
-	{ 0, "Unknown" },
-	{ 1, "Host quit" },
-	{ 2, "Incorrect protocol version" },
-	{ 3, "Game loading" },
-	{ 4, "Game has started already" },
-	{ 5, "Kicked" },
-	{ 6, "Banned" }
-};
-#endif
-
-#if GAMEVERSION >= 20
-static const value_string DisconnectReason[] = {
-	{ 0, "Unknown" },
-	{ 1, "Host quit" },
-	{ 2, "Incorrect protocol version" },
+#elif GAMEVERSION >= 19
 	{ 3, "Game loading" },
 	{ 4, "Game has started already" },
 	{ 5, "Kicked" },
 	{ 6, "Banned" },
+#endif
+
+#if GAMEVERSION >= 20
 	{ 7, "Playername in use" },
 	{ 8, "Server full" }
-};
 #endif
+};
 
 static dissector_handle_t handle_0ad = NULL;
 static reassembly_table msg_fragment_table;
