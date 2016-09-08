@@ -460,14 +460,14 @@ static hf_register_info hf[] = {
 		"A sequential number identifying the peer, beginning with 1.", HFILL }
 	},
 	{ &hf_chat_message,
-		{ "Chat Message", "0ad.chat_message",
+		{ "Chat Message", "0ad.chat",
 		FT_NONE, BASE_NONE,
 		NULL, 0x0,
 		"The chat message that the user sent.", HFILL }
 	},
 #if GAMEVERSION >= 19
 	{ &hf_ban_flag,
-		{ "Ban Flag", "0ad.banned",
+		{ "Ban Flag", "0ad.ban",
 		FT_BOOLEAN, 0,
 		NULL, 0x0,
 		"Whether the client was banned.", HFILL }
