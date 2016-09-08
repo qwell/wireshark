@@ -31,9 +31,6 @@
 #include <epan/packet.h>
 #include <epan/reassemble.h>
 
-/** This dissector plugin supports 0 A.D. alpha 18 to 21. */
-#define GAMEVERSION 21
-
 /* The following constants are defined in NetMessages.h */
 #define PS_DEFAULT_PORT						0x5073		/* 'P', 's' (UDP Port 20595) */
 #define PS_PROTOCOL_MAGIC					0x5073013f	/* 'P', 's', 0x01, '?' */
@@ -45,6 +42,25 @@
 #define PS_PROTOCOL_VERSION_ALPHA_19		0x01010006
 #define PS_PROTOCOL_VERSION_ALPHA_20		0x01010011
 #define PS_PROTOCOL_VERSION_ALPHA_21		0x01010014
+
+/** This dissector plugin supports 0 A.D. alpha 18 to 21. */
+#define GAMEVERSION 21
+
+#if GAMEVERSION == 21
+	#define EXPECTED_PROTOCOL_VERSION PS_PROTOCOL_VERSION_ALPHA_21
+#elif GAMEVERSION == 20
+	#define EXPECTED_PROTOCOL_VERSION PS_PROTOCOL_VERSION_ALPHA_20
+#elif GAMEVERSION == 19
+	#define EXPECTED_PROTOCOL_VERSION PS_PROTOCOL_VERSION_ALPHA_19
+#elif GAMEVERSION >= 8 && GAMEVERSION <= 18
+	#define EXPECTED_PROTOCOL_VERSION PS_PROTOCOL_VERSION_ALPHA_8_18
+#elif GAMEVERSION >= 1 && GAMEVERSION <= 7
+	#define EXPECTED_PROTOCOL_VERSION PS_PROTOCOL_VERSION_ALPHA_1_7
+#elif GAMEVERSION >= 1 && GAMEVERSION <= 7
+	#define EXPECTED_PROTOCOL_VERSION PS_PROTOCOL_VERSION_ALPHA_1_7
+#else
+	#define EXPECTED_PROTOCOL_VERSION PS_PROTOCOL_VERSION_PRE_ALPHA_3
+#endif
 
 /*
  * Custom serialization used for gamesetup and simulation commands.
@@ -796,27 +812,45 @@ dissect_0ad_script_element(tvbuff_t *tvb, const gchar *parent_field, const gchar
 /* Parsing of 0 A.D. messages that utilize the methods above */
 
 static void
-dissect_0ad_handshake(tvbuff_t *tvb)
+dissect_0ad_protocol_version(tvbuff_t *tvb, packet_info *pinfo)
+{
+	guint32 protocol_version = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree_0ad, hf_protocol_version, tvb, offset, 4, ENC_BIG_ENDIAN);
+	offset += 4;
+
+	if (protocol_version != EXPECTED_PROTOCOL_VERSION) {
+		col_clear(pinfo->cinfo,COL_INFO);
+		col_append_fstr(
+			pinfo->cinfo,
+			COL_INFO,
+			"Wrong protocol version, found %#010x, expected %#010x (alpha %d).",
+			protocol_version,
+			EXPECTED_PROTOCOL_VERSION,
+			GAMEVERSION);
+	}
+}
+
+static void
+dissect_0ad_handshake(tvbuff_t *tvb, packet_info *pinfo)
 {
 	/* Protocol Magic */
 	proto_tree_add_item(tree_0ad, hf_protocol_magic, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
 
 	/* Protocol Version */
-	proto_tree_add_item(tree_0ad, hf_protocol_version, tvb, offset, 4, ENC_BIG_ENDIAN);
-	offset += 4;
+	dissect_0ad_protocol_version(tvb, pinfo);
 
 	/* Software Version */
 	proto_tree_add_item(tree_0ad, hf_software_version, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
+
 }
 
 static void
-dissect_0ad_server_handshake_response(tvbuff_t *tvb)
+dissect_0ad_server_handshake_response(tvbuff_t *tvb, packet_info *pinfo)
 {
 	/* Protocol Version */
-	proto_tree_add_item(tree_0ad, hf_protocol_version, tvb, offset, 4, ENC_BIG_ENDIAN);
-	offset += 4;
+	dissect_0ad_protocol_version(tvb, pinfo);
 
 	/* Flags */
 	proto_tree_add_item(tree_0ad, hf_connection_flags, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1206,9 +1240,9 @@ dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad
 
 	/* Dissect specific message */
 	switch(messageType) {
-		case 1: dissect_0ad_handshake(tvb); break;
-		case 2: dissect_0ad_handshake(tvb); break;
-		case 3: dissect_0ad_server_handshake_response(tvb); break;
+		case 1: dissect_0ad_handshake(tvb, pinfo); break;
+		case 2: dissect_0ad_handshake(tvb, pinfo); break;
+		case 3: dissect_0ad_server_handshake_response(tvb, pinfo); break;
 		case 4: dissect_0ad_authentication(tvb); break;
 		case 5: dissect_0ad_authentication_result(tvb); break;
 		case 6: dissect_0ad_chat(tvb, pinfo); break;
