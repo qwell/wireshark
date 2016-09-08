@@ -933,18 +933,21 @@ dissect_0ad_gamesetup(tvbuff_t *tvb, proto_item *tree_item_0ad)
 static void
 dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
 {
-	/* User GUID */
-	const gchar *user_guid = dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
-	const gchar *username = (const gchar*) g_hash_table_lookup(table_guid_username, (gpointer) g_strdup(user_guid));
+	const gchar *user_guid;
+	const gchar *username;
 
 	/* Player ID */
 	const guint playerID = tvb_get_guint8(tvb, offset);
 	proto_tree_add_item(tree_0ad, hf_player_id, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 
+	/* User GUID */
+	user_guid = dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+	username = (const gchar*) g_hash_table_lookup(table_guid_username, (gpointer) g_strdup(user_guid));
+
 	/* Update colum info */
 	if (strlen(user_guid) > 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, "%s -> %d", username, playerID);
+		col_append_fstr(pinfo->cinfo, COL_INFO, ": %s -> %d", username, playerID);
 }
 #endif
 
