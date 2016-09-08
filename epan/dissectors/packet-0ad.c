@@ -425,7 +425,7 @@ static hf_register_info hf[] = {
 	},
 	{ &hf_player_id,
 		{ "Player ID", "0ad.player_id",
-		FT_UINT8, BASE_DEC,
+		FT_INT8, BASE_DEC,
 		NULL, 0x0,
 		"Sequential index of that player. Gaia has 0 and observers -1.", HFILL }
 	},
@@ -937,7 +937,7 @@ dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
 	const gchar *username;
 
 	/* Player ID */
-	const guint playerID = tvb_get_guint8(tvb, offset);
+	const gint8 playerID = tvb_get_guint8(tvb, offset);
 	proto_tree_add_item(tree_0ad, hf_player_id, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
 
@@ -955,7 +955,7 @@ static void
 dissect_0ad_player_assignments(tvbuff_t *tvb, packet_info *pinfo)
 {
 	/* TODO: maybe the assignemnt can be empty? */
-	guint playerID = 0;
+	gint8 playerID;
 	proto_item *ti = NULL;
 	gchar *user_guid;
 	gchar *username;
