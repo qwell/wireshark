@@ -31,6 +31,9 @@
 #include <epan/packet.h>
 #include <epan/reassemble.h>
 
+/** This dissector plugin supports 0 A.D. alpha 18 to 21. */
+#define GAMEVERSION 21
+
 /* The following constants are defined in NetMessages.h */
 #define PS_DEFAULT_PORT						0x5073		/* 'P', 's' (UDP Port 20595) */
 #define PS_PROTOCOL_MAGIC					0x5073013f	/* 'P', 's', 0x01, '?' */
@@ -117,9 +120,28 @@ static const value_string ProtocolMagic[] = {
 	{ 0, NULL }
 };
 
-#define GAMEVERSION 20
+/* Offset to avoid duplicate entries */
+#if GAMEVERSION >= 21
+#define COMMAND_OFFSET1 1
+#define COMMAND_OFFSET2 2
+#else
+#define COMMAND_OFFSET1 0
+#define COMMAND_OFFSET2 0
+#endif
 
-#if GAMEVERSION==18
+#if GAMEVERSION <= 18
+#define COMMAND_OFFSET4 0
+#elif GAMEVERSION == 19
+#define COMMAND_OFFSET4 2;
+#elif GAMEVERSION == 20
+#define COMMAND_OFFSET4 4
+#else
+#define COMMAND_OFFSET4 5
+#endif
+
+#define COMMAND_OFFSET3 COMMAND_OFFSET2+COMMAND_OFFSET4
+
+
 static const value_string NetMessageTypes[] = {
 	{ 0, "Invalid" },
 	{ 1, "Server Handshake" },
@@ -129,82 +151,38 @@ static const value_string NetMessageTypes[] = {
 	{ 5, "Authentication Result" },
 	{ 6, "Chat" },
 	{ 7, "Ready" },
-	{ 8, "Game Setup" },
-	{ 9, "Player Assignment" },
-	{ 10, "File Transfer Request" },
-	{ 11, "File Transfer Response" },
-	{ 12, "File Transfer Data" },
-	{ 13, "File Transfer Acknowledge" },
-	{ 14, "Join Sync Start" },
-	{ 15, "Loaded Game" },
-	{ 16, "Game Start" },
-	{ 17, "End Command Batch"},
-	{ 18, "Synchronization Check"},
-	{ 19, "Synchronization Error"},
-	{ 20, "Simulation Command"},
-	{ 21, NULL }
-};
+#if GAMEVERSION >= 21
+	{ 8, "Clear Ready" },
 #endif
-
-#if GAMEVERSION==19
-static const value_string NetMessageTypes[] = {
-	{ 0, "Invalid" },
-	{ 1, "Server Handshake" },
-	{ 2, "Client Handshake" },
-	{ 3, "Server Handshake Response" },
-	{ 4, "Authentication" },
-	{ 5, "Authentication Result" },
-	{ 6, "Chat" },
-	{ 7, "Ready" },
-	{ 8, "Game Setup" },
-	{ 9, "Player Assignment" },
-	{ 10, "File Transfer Request" },
-	{ 11, "File Transfer Response" },
-	{ 12, "File Transfer Data" },
-	{ 13, "File Transfer Acknowledge" },
-	{ 14, "Join Sync Start" },
-	{ 15, "Client Rejoined" },
-	{ 16, "Client Kicked" },
-	{ 17, "Loaded Game" },
-	{ 18, "Game Start" },
-	{ 19, "End Command Batch"},
-	{ 20, "Synchronization Check"},
-	{ 21, "Synchronization Error"},
-	{ 22, "Simulation Command"},
-	{ 21, NULL }
-};
+	{ 8 + COMMAND_OFFSET1, "Game Setup" },
+#if GAMEVERSION >= 21
+	{ 9 + COMMAND_OFFSET1, "Player Assignment Request" },
 #endif
-
-#if GAMEVERSION==20
-static const value_string NetMessageTypes[] = {
-	{ 0, "Invalid" },
-	{ 1, "Server Handshake" },
-	{ 2, "Client Handshake" },
-	{ 3, "Server Handshake Response" },
-	{ 4, "Authentication" },
-	{ 5, "Authentication Result" },
-	{ 6, "Chat" },
-	{ 7, "Ready" },
-	{ 8, "Game Setup" },
-	{ 9, "Player Assignment" },
-	{ 10, "File Transfer Request" },
-	{ 11, "File Transfer Response" },
-	{ 12, "File Transfer Data" },
-	{ 13, "File Transfer Acknowledge" },
-	{ 14, "Join Sync Start" },
-	{ 15, "Client Rejoined" },
-	{ 16, "Client Kicked" },
-	{ 17, "Client Timeout" },
-	{ 18, "Client Performance" },
-	{ 19, "Loaded Game" },
-	{ 20, "Game Start" },
-	{ 21, "End Command Batch"},
-	{ 22, "Synchronization Check"},
-	{ 23, "Synchronization Error"},
-	{ 24, "Simulation Command"},
-	{ 21, NULL }
-};
+	{ 9 + COMMAND_OFFSET2, "Player Assignments" },
+	{ 10 + COMMAND_OFFSET2, "File Transfer Request" },
+	{ 11 + COMMAND_OFFSET2, "File Transfer Response" },
+	{ 12 + COMMAND_OFFSET2, "File Transfer Data" },
+	{ 13 + COMMAND_OFFSET2, "File Transfer Acknowledge" },
+	{ 14 + COMMAND_OFFSET2, "Join Sync Start" },
+#if GAMEVERSION >= 19
+	{ 15 + COMMAND_OFFSET2, "Client Rejoined" },
+	{ 16 + COMMAND_OFFSET2, "Client Kicked" },
 #endif
+#if GAMEVERSION >= 20
+	{ 17 + COMMAND_OFFSET2, "Client Timeout" },
+	{ 18 + COMMAND_OFFSET2, "Client Performance" },
+#endif
+#if GAMEVERSION >= 21
+	{ 19 + COMMAND_OFFSET2, "Client Paused" },
+#endif
+	{ 15 + COMMAND_OFFSET3, "Loaded Game" },
+	{ 16 + COMMAND_OFFSET3, "Game Start" },
+	{ 17 + COMMAND_OFFSET3, "End Command Batch"},
+	{ 18 + COMMAND_OFFSET3, "Synchronization Check"},
+	{ 19 + COMMAND_OFFSET3, "Synchronization Error"},
+	{ 20 + COMMAND_OFFSET3, "Simulation Command"},
+	{ 21 + COMMAND_OFFSET3, NULL }
+};
 
 static const value_string AuthenticationResult[] = {
 	{ 0, "Ok" },
@@ -219,7 +197,7 @@ static const value_string ReadyStatus[] = {
 };
 
 /* Taken from NetHost.h */
-#if GAMEVERSION==18
+#if GAMEVERSION == 18
 static const value_string DisconnectReason[] = {
 	{ 0, "Unknown" },
 	{ 1, "Host Quit" },
@@ -228,7 +206,7 @@ static const value_string DisconnectReason[] = {
 };
 #endif
 
-#if GAMEVERSION==19
+#if GAMEVERSION == 19
 static const value_string DisconnectReason[] = {
 	{ 0, "Unknown" },
 	{ 1, "Host quit" },
@@ -240,7 +218,7 @@ static const value_string DisconnectReason[] = {
 };
 #endif
 
-#if GAMEVERSION==20
+#if GAMEVERSION >= 20
 static const value_string DisconnectReason[] = {
 	{ 0, "Unknown" },
 	{ 1, "Host quit" },
@@ -301,6 +279,20 @@ static gint hf_authentication_result_message = -1;
 
 static gint hf_chat_message = -1;
 static gint hf_ready_status = -1;
+
+#if GAMEVERSION >= 19
+static gint hf_ban_flag = -1;
+#endif
+
+#if GAMEVERSION >= 20
+static gint hf_last_received_time = -1;
+static gint hf_mean_rtt = -1;
+#endif
+
+#if GAMEVERSION >= 21
+static gint hf_assigned_player_id = -1;
+static gint hf_pause_flag = -1;
+#endif
 
 static gint hf_current_turn = -1;
 static gint hf_turn_length = -1;
@@ -473,6 +465,42 @@ static hf_register_info hf[] = {
 		NULL, 0x0,
 		"The chat message that the user sent.", HFILL }
 	},
+#if GAMEVERSION >= 19
+	{ &hf_ban_flag,
+		{ "Ban Flag", "0ad.banned",
+		FT_BOOLEAN, 0,
+		NULL, 0x0,
+		"Whether the client was banned.", HFILL }
+	},
+#endif
+#if GAMEVERSION >= 20
+	{ &hf_last_received_time,
+		{ "Last Received", "0ad.last_received",
+		FT_UINT32, BASE_DEC,
+		NULL, 0x0,
+		"Unix timestamp stating when the server received the last packet from that client.", HFILL }
+	},
+	{ &hf_mean_rtt,
+		{ "Last Received", "0ad.mean_rtt",
+		FT_UINT32, BASE_DEC,
+		NULL, 0x0,
+		"Mean round trip time between the server and that client in milliseconds.", HFILL }
+	},
+#endif
+#if GAMEVERSION >= 21
+	{ &hf_assigned_player_id,
+		{ "Player ID", "0ad.assigned_player_id",
+		FT_UINT8, BASE_DEC,
+		NULL, 0x0,
+		"States under which player ID the client given by the GUID will play.", HFILL }
+	},
+	{ &hf_pause_flag,
+		{ "Paused", "0ad.paused",
+		FT_BOOLEAN, 0,
+		NULL, 0x0,
+		"Whether that client has paused or unpaused the game.", HFILL }
+	},
+#endif
 	{ &hf_ready_status,
 		{ "Ready Status", "0ad.ready_status",
 		FT_UINT8, BASE_DEC,
@@ -816,7 +844,6 @@ dissect_0ad_server_handshake_response(tvbuff_t *tvb)
 static void
 dissect_0ad_authentication(tvbuff_t *tvb)
 {
-
 	/* User GUID */
 	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
 
@@ -885,7 +912,29 @@ dissect_0ad_ready(tvbuff_t *tvb, packet_info *pinfo)
 }
 
 static void
-dissect_0ad_player_assignment(tvbuff_t *tvb, packet_info *pinfo)
+dissect_0ad_gamesetup(tvbuff_t *tvb, proto_item *tree_item_0ad)
+{
+	dissect_0ad_script_element(tvb, "0ad", "Gamesetup", tree_item_0ad, ENC_LITTLE_ENDIAN);
+}
+
+static void
+dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
+{
+	/* User GUID */
+	const gchar *user_guid = dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+	const gchar *username = (const gchar*) g_hash_table_lookup(table_guid_username, (gpointer) g_strdup(user_guid));
+
+	/* Player ID */
+	const guint playerID = tvb_get_guint8(tvb, offset);
+	proto_tree_add_item(tree_0ad, hf_assigned_player_id, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+
+	/* Update colum info */
+	if (strlen(user_guid) > 0)
+		col_append_fstr(pinfo->cinfo, COL_INFO, "%s -> %d", username, playerID);
+}
+static void
+dissect_0ad_player_assignments(tvbuff_t *tvb, packet_info *pinfo)
 {
 	/* TODO: maybe the assignemnt can be empty? */
 	guint playerID = 0;
@@ -1036,6 +1085,63 @@ dissect_0ad_file_transfer_acknowledge(tvbuff_t *tvb)
 	offset += 4;
 }
 
+#if GAMEVERSION >= 19
+static void
+dissect_0ad_rejoined(tvbuff_t *tvb)
+{
+	/* User GUID */
+	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+}
+
+static void
+dissect_0ad_kicked(tvbuff_t *tvb)
+{
+	/* User GUID */
+	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+
+	/* Ban boolean */
+	proto_tree_add_item(tree_0ad, hf_ban_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+}
+#endif
+
+#if GAMEVERSION >= 20
+static void
+dissect_0ad_timeout(tvbuff_t *tvb)
+{
+	/* User GUID */
+	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+
+	/* Last received time (unix timestamp) */
+	proto_tree_add_item(tree_0ad, hf_last_received_time, tvb, offset, 4, ENC_BIG_ENDIAN);
+	offset += 4;
+}
+
+static void
+dissect_0ad_performance(tvbuff_t *tvb)
+{
+	/* User GUID */
+	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+
+	/* Mean round trip time */
+	proto_tree_add_item(tree_0ad, hf_mean_rtt, tvb, offset, 4, ENC_BIG_ENDIAN);
+	offset += 4;
+}
+#endif
+
+#if GAMEVERSION >= 21
+static void
+dissect_0ad_pause(tvbuff_t *tvb)
+{
+	/* User GUID */
+	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+
+	/* Ban boolean */
+	proto_tree_add_item(tree_0ad, hf_pause_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
+	offset += 1;
+}
+#endif
+
 static void
 dissect_0ad_loaded_game(tvbuff_t *tvb)
 {
@@ -1085,6 +1191,12 @@ dissect_0ad_sync(tvbuff_t *tvb)
 }
 
 static void
+dissect_0ad_simulation_command(tvbuff_t *tvb, proto_item *tree_item_0ad)
+{
+	dissect_0ad_script_element(tvb, "0ad", "Simulation Command", tree_item_0ad, ENC_BIG_ENDIAN);
+}
+
+static void
 dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad)
 {
 	const guint8 messageType = tvb_get_guint8(tvb, offset);
@@ -1108,7 +1220,6 @@ dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad
 	offset += 2;
 
 	/* Dissect specific message */
-	// TODO: support other versions
 	switch(messageType) {
 		case 1: dissect_0ad_handshake(tvb); break;
 		case 2: dissect_0ad_handshake(tvb); break;
@@ -1117,21 +1228,39 @@ dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad
 		case 5: dissect_0ad_authentication_result(tvb); break;
 		case 6: dissect_0ad_chat(tvb, pinfo); break;
 		case 7: dissect_0ad_ready(tvb, pinfo); break;
-		case 8: dissect_0ad_script_element(tvb, "0ad", "Gamesetup", tree_item_0ad, ENC_LITTLE_ENDIAN); break;
-		case 9: dissect_0ad_player_assignment(tvb, pinfo); break;
-		case 10: dissect_0ad_file_transfer_request(tvb); break;
-		case 11: dissect_0ad_file_transfer_response(tvb); break;
-		case 12: dissect_0ad_file_transfer_data(tvb, pinfo); break;
-		case 13: dissect_0ad_file_transfer_acknowledge(tvb); break;
-		case 14: /* join sync start */ break;
-		case 15: dissect_0ad_loaded_game(tvb); break;
-		case 16: /* game start */ break;
-		case 17: dissect_0ad_end_command_batch(tvb); break;
-		case 18: dissect_0ad_sync(tvb); break;
-		case 19: dissect_0ad_sync(tvb); break;
-		case 20: dissect_0ad_script_element(tvb, "0ad", "Simulation Command", tree_item_0ad, ENC_BIG_ENDIAN); break;
+#if GAMEVERSION >= 21
+		case 8: /* clear all ready */ break;
+#endif
+		case 8 + COMMAND_OFFSET1: dissect_0ad_gamesetup(tvb, tree_item_0ad); break;
+#if GAMEVERSION >= 21
+		case 9 + COMMAND_OFFSET1: dissect_0ad_player_assignment_request(tvb, pinfo); break;
+#endif
+		case 9 + COMMAND_OFFSET2: dissect_0ad_player_assignments(tvb, pinfo); break;
+		case 10 + COMMAND_OFFSET2: dissect_0ad_file_transfer_request(tvb); break;
+		case 11 + COMMAND_OFFSET2: dissect_0ad_file_transfer_response(tvb); break;
+		case 12 + COMMAND_OFFSET2: dissect_0ad_file_transfer_data(tvb, pinfo); break;
+		case 13 + COMMAND_OFFSET2: dissect_0ad_file_transfer_acknowledge(tvb); break;
+		case 14 + COMMAND_OFFSET2: /* join sync start */ break;
+#if GAMEVERSION >= 19
+		case 15 + COMMAND_OFFSET2: dissect_0ad_rejoined(tvb); break;
+		case 16 + COMMAND_OFFSET2: dissect_0ad_kicked(tvb); break;
+#endif
+#if GAMEVERSION >= 20
+		case 17 + COMMAND_OFFSET2: dissect_0ad_timeout(tvb); break;
+		case 18 + COMMAND_OFFSET2: dissect_0ad_performance(tvb); break;
+#endif
+#if GAMEVERSION >= 21
+		case 19 + COMMAND_OFFSET2: dissect_0ad_pause(tvb); break;
+#endif
+		case 15 + COMMAND_OFFSET3: dissect_0ad_loaded_game(tvb); break;
+		case 16 + COMMAND_OFFSET3: /* game start */ break;
+		case 17 + COMMAND_OFFSET3: dissect_0ad_end_command_batch(tvb); break;
+		case 18 + COMMAND_OFFSET3: dissect_0ad_sync(tvb); break;
+		case 19 + COMMAND_OFFSET3: dissect_0ad_sync(tvb); break;
+		case 20 + COMMAND_OFFSET3: dissect_0ad_simulation_command(tvb, tree_item_0ad); break;
 		default: break;
 	}
+
 }
 
 static int
