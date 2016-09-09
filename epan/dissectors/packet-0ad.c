@@ -632,8 +632,10 @@ dissect_0ad_string(tvbuff_t *tvb, gint hf_string_length, gint hf_string, proto_t
 
 	/* String */
 	string = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, string_length, ENC_UTF_8);
-	proto_tree_add_item(tree, hf_string, tvb, offset, string_length, ENC_BIG_ENDIAN);
-	offset += string_length;
+	if (strlen(string)) {
+		proto_tree_add_item(tree, hf_string, tvb, offset, string_length, ENC_BIG_ENDIAN);
+		offset += string_length;
+	}
 
 	return string;
 }
