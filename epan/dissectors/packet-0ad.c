@@ -253,6 +253,7 @@ static gint ett_msg_fragments_subtree = -1;
 
 static gint hf_script_type = -1;
 static gint hf_script_integer = -1;
+static gint hf_script_double = -1;
 static gint hf_script_bool = -1;
 static gint hf_script_string = -1;
 
@@ -356,6 +357,12 @@ static hf_register_info hf[] = {
 		FT_UINT32, BASE_DEC,
 		NULL, 0x0,
 		"A 32bit number.", HFILL }
+	},
+	{ &hf_script_double,
+		{ "Double", "0ad.script_double",
+		FT_DOUBLE, BASE_FLOAT,
+		NULL, 0x0,
+		"A 64bit floating point number.", HFILL }
 	},
 	{ &hf_script_bool,
 		{ "Boolean", "0ad.script_boolean",
@@ -711,6 +718,16 @@ dissect_0ad_script_integer(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tr
 	return value;
 }
 
+static guint32
+dissect_0ad_script_double(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tree, guint encoding)
+{
+	const gfloat value = tvb_get_ieee_double(tvb, offset, encoding);
+	proto_item *ti = proto_tree_add_item(tree, hf_script_double, tvb, offset, 8, encoding);
+	proto_item_set_text(ti, "%s: %f", fieldname, value);
+	offset += 8;
+	return value;
+}
+
 static gboolean
 dissect_0ad_script_boolean(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tree, guint encoding)
 {
@@ -799,6 +816,7 @@ dissect_0ad_script_element(tvbuff_t *tvb, const gchar *parent_field, const gchar
 		case SCRIPT_TYPE_OBJECT: dissect_0ad_script_array(tvb, parent_field, fieldname, type, tree, encoding); break;
 		case SCRIPT_TYPE_STRING: dissect_0ad_script_string(tvb, fieldname, tree, encoding); break;
 		case SCRIPT_TYPE_INT: dissect_0ad_script_integer(tvb, fieldname, tree, encoding); break;
+		case SCRIPT_TYPE_DOUBLE: dissect_0ad_script_double(tvb, fieldname, tree, encoding); break;
 		case SCRIPT_TYPE_BOOLEAN: dissect_0ad_script_boolean(tvb, fieldname, tree, encoding); break;
 		default: break;//g_print("NOT SUPPORTED"); /* TODO: throw not supported error */ break;
 	}
