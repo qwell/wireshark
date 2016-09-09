@@ -806,6 +806,19 @@ dissect_0ad_script_element(tvbuff_t *tvb, const gchar *parent_field, const gchar
 
 /* Parsing of 0 A.D. messages that utilize the methods above */
 
+static gchar*
+dissect_0ad_user_guid(tvbuff_t *tvb, gchar *user_guid)
+{
+	gchar *username;
+	user_guid = dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+	username = (gchar*) g_hash_table_lookup(table_guid_username, (gpointer) g_strdup(user_guid));
+
+	if (username == NULL)
+		return "";
+
+	return username;
+}
+
 static void
 dissect_0ad_protocol_version(tvbuff_t *tvb, packet_info *pinfo)
 {
@@ -887,14 +900,15 @@ static void
 dissect_0ad_chat(tvbuff_t *tvb, packet_info *pinfo)
 {
 	/* User GUID */
-	const gchar *user_guid = dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
-	const gchar *username = (const gchar*) g_hash_table_lookup(table_guid_username, (gpointer) g_strdup(user_guid));
+	gchar *user_guid = "";
+	gchar *username = dissect_0ad_user_guid(tvb, user_guid);
 
 	/* Chat Message */
 	const gchar *text = dissect_0ad_wide_string(tvb, hf_chat_message, tree_0ad, ENC_BIG_ENDIAN);
 
 	/* Update colum info */
-	if (strlen(user_guid) > 0)
+	/* (Outgoing chat messages don't set the GUID) */
+	if (strlen(username))
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s: %s", username, text);
 }
 
@@ -902,8 +916,8 @@ static void
 dissect_0ad_ready(tvbuff_t *tvb, packet_info *pinfo)
 {
 	/* User GUID */
-	const gchar *user_guid = dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
-	const gchar *username = (const gchar*) g_hash_table_lookup(table_guid_username, (gpointer) g_strdup(user_guid));
+	gchar *user_guid = "";
+	gchar *username = dissect_0ad_user_guid(tvb, user_guid);
 
 	/* Ready Status */
 	const guint8 readyStatus = tvb_get_guint8(tvb, offset);
@@ -911,7 +925,7 @@ dissect_0ad_ready(tvbuff_t *tvb, packet_info *pinfo)
 	offset += 1;
 
 	/* Update column info with playernames */
-	if (strlen(user_guid) > 0) {
+	if (strlen(username)) {
 		if (readyStatus)
 			col_append_fstr(pinfo->cinfo, COL_INFO, " %s", username);
 		else
@@ -930,8 +944,8 @@ dissect_0ad_gamesetup(tvbuff_t *tvb, proto_item *tree_item_0ad)
 static void
 dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
 {
-	const gchar *user_guid;
-	const gchar *username;
+	gchar *user_guid = "";
+	gchar *username;
 
 	/* Player ID */
 	const gint8 playerID = tvb_get_guint8(tvb, offset);
@@ -939,11 +953,10 @@ dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
 	offset += 1;
 
 	/* User GUID */
-	user_guid = dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
-	username = (const gchar*) g_hash_table_lookup(table_guid_username, (gpointer) g_strdup(user_guid));
+	username = dissect_0ad_user_guid(tvb, user_guid);
 
 	/* Update colum info */
-	if (strlen(user_guid) > 0)
+	if (strlen(username))
 		col_append_fstr(pinfo->cinfo, COL_INFO, ": %s -> %d", username, playerID);
 }
 #endif
@@ -951,10 +964,9 @@ dissect_0ad_player_assignment_request(tvbuff_t *tvb, packet_info *pinfo)
 static void
 dissect_0ad_player_assignments(tvbuff_t *tvb, packet_info *pinfo)
 {
-	/* TODO: maybe the assignemnt can be empty? */
 	gint8 playerID;
 	proto_item *ti = NULL;
-	gchar *user_guid;
+	gchar *user_guid = "";
 	gchar *username;
 
 	do {
