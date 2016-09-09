@@ -764,18 +764,34 @@ dissect_0ad_script_boolean(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tr
 static gchar*
 dissect_0ad_script_string(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tree, guint encoding)
 {
+	guint32 string_length;
+	gchar *string;
+	guint string_encoding;
+
 	/* Add subtree */
 	proto_item *ti = NULL;
 	proto_tree *subtree = proto_tree_add_subtree(tree, tvb,
 			offset, 0, ett_0ad_script_array_subtree, &ti, "");
 
+	/* This has changed with the spider monkey 38 upgrade in alpha 21, revision 18686 */
+#if GAMEVERSION >= 21
+	dissect_0ad_script_boolean(tvb, "isLatin1", subtree, encoding);
+#endif
+
 	/* String Length */
-	guint32 string_length = 2 * dissect_0ad_script_integer(tvb, g_strdup_printf("Length"), subtree, encoding);
+	string_length = dissect_0ad_script_integer(tvb, g_strdup_printf("Length"), subtree, encoding);
+
+#if GAMEVERSION >= 21
+	string_encoding = encoding;
+#else
+	string_encoding = ENC_UTF_16|encoding;
+	string_length *= 2;
+#endif
 
 	/* String */
-	gchar *string = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, string_length, ENC_UTF_16|encoding);
+	string = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, string_length, string_encoding);
+	proto_tree_add_item(subtree, hf_script_string, tvb, offset, string_length, string_encoding);
 
-	proto_tree_add_item(subtree, hf_script_string, tvb, offset, string_length, ENC_UTF_16|encoding);
 	proto_item_set_text(ti, "%s: %s", fieldname, string);
 	offset += string_length;
 
