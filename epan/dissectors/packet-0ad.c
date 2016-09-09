@@ -318,6 +318,11 @@ static int hf_msg_reassembled_in = -1;
 static int hf_msg_reassembled_length = -1;
 static int hf_msg_reassembled_data = -1;
 
+/* Simulation Command class members */
+static int hf_client_id = -1;
+static int hf_simulation_command_player_id = -1;
+static int hf_turn_number = -1;
+
 static const fragment_items msg_frag_items = {
 	/* Fragment subtrees */
 	&ett_msg_fragment_subtree,
@@ -621,6 +626,24 @@ static hf_register_info hf[] = {
 		FT_NONE, BASE_NONE,
 		NULL, 0x00,
 		NULL, HFILL }
+	},
+	{ &hf_client_id,
+		{ "Client ID", "0ad.client_id",
+		FT_UINT32, BASE_DEC,
+		NULL, 0x00,
+		NULL, HFILL }
+	},
+	{ &hf_simulation_command_player_id,
+		{ "Player ID", "0ad.simulation_command_player_id",
+		FT_INT32, BASE_DEC,
+		NULL, 0x0,
+		"Sequential index of that player. Gaia has 0 and observers -1.", HFILL }
+	},
+	{ &hf_turn_number,
+		{ "Turn Number", "0ad.turn_number",
+		FT_UINT32, BASE_DEC,
+		NULL, 0x00,
+		"Current turn in the simulation state.", HFILL }
 	}
 };
 
@@ -1276,7 +1299,22 @@ dissect_0ad_sync(tvbuff_t *tvb)
 static void
 dissect_0ad_simulation_command(tvbuff_t *tvb, proto_item *tree_item_0ad)
 {
-	dissect_0ad_script_element(tvb, "0ad", "Simulation Command", tree_item_0ad, ENC_BIG_ENDIAN);
+	/* See CSimulationMessage in NetMessage.h */
+
+	/* m_Client */
+	proto_tree_add_item(tree_item_0ad, hf_client_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+
+	/* m_Player */
+	proto_tree_add_item(tree_item_0ad, hf_simulation_command_player_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+
+	/* m_Turn */
+	proto_tree_add_item(tree_item_0ad, hf_turn_number, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+
+	/* m_Data */
+	dissect_0ad_script_element(tvb, "0ad", "Command", tree_item_0ad, ENC_LITTLE_ENDIAN);
 }
 
 static void
