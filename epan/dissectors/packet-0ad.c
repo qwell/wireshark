@@ -481,7 +481,7 @@ static hf_register_info hf[] = {
 		"Time in milliseconds since the server received the last packet from that client.", HFILL }
 	},
 	{ &hf_mean_rtt,
-		{ "Last Received", "0ad.mean_rtt",
+		{ "Mean Round Trip Time", "0ad.mean_rtt",
 		FT_UINT32, BASE_DEC,
 		NULL, 0x0,
 		"Mean round trip time between the server and that client in milliseconds.", HFILL }
@@ -1114,58 +1114,95 @@ dissect_0ad_file_transfer_acknowledge(tvbuff_t *tvb)
 
 #if GAMEVERSION >= 19
 static void
-dissect_0ad_rejoined(tvbuff_t *tvb)
+dissect_0ad_rejoined(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad)
 {
 	/* User GUID */
-	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+	gchar *user_guid = "";
+	gchar *username = dissect_0ad_user_guid(tvb, user_guid);
+
+	if (strlen(username)) {
+		proto_item_append_text(tree_item_0ad, " %s", username);
+		col_append_fstr(pinfo->cinfo, COL_INFO, " %s", username);
+	}
 }
 
 static void
-dissect_0ad_kicked(tvbuff_t *tvb)
+dissect_0ad_kicked(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad)
 {
 	/* Username */
-	const gchar *username = dissect_0ad_wide_string(tvb, hf_username, tree_0ad, ENC_BIG_ENDIAN);
+	gchar *username = dissect_0ad_wide_string(tvb, hf_username, tree_0ad, ENC_BIG_ENDIAN);
 
 	/* Ban boolean */
+	const gboolean banned = tvb_get_guint8(tvb, offset);
 	proto_tree_add_item(tree_0ad, hf_ban_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
+
+	proto_item_append_text(tree_item_0ad, " %s %s", username, banned ? "(Banned)" : "");
+	col_append_fstr(pinfo->cinfo, COL_INFO, " %s %s", username, banned ? "(Banned)" : "");
 }
 #endif
 
 #if GAMEVERSION >= 20
 static void
-dissect_0ad_timeout(tvbuff_t *tvb)
+dissect_0ad_timeout(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad)
 {
-	/* User GUID */
-	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+	guint32 lastReceivedTime;
 
-	/* Last received time (unix timestamp) */
+	/* User GUID */
+	gchar *user_guid = "";
+	gchar *username = dissect_0ad_user_guid(tvb, user_guid);
+
+	/* Last received time */
+	lastReceivedTime = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
 	proto_tree_add_item(tree_0ad, hf_last_received_time, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
+
+	proto_item_append_text(tree_item_0ad, " %s (%ds)", username, lastReceivedTime);
+	col_append_fstr(pinfo->cinfo, COL_INFO, " %s (%ds)", username, lastReceivedTime);
 }
 
 static void
-dissect_0ad_performance(tvbuff_t *tvb)
+dissect_0ad_performance(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad)
 {
+	guint32 meanRTT;
+
 	/* User GUID */
-	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+	gchar *user_guid = "";
+	gchar *username = dissect_0ad_user_guid(tvb, user_guid);
 
 	/* Mean round trip time */
+	meanRTT = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
 	proto_tree_add_item(tree_0ad, hf_mean_rtt, tvb, offset, 4, ENC_BIG_ENDIAN);
 	offset += 4;
+
+	proto_item_append_text(tree_item_0ad, " %s (%dms)", username, meanRTT);
+	col_append_fstr(pinfo->cinfo, COL_INFO, " %s (%dms)", username, meanRTT);
 }
 #endif
 
 #if GAMEVERSION >= 21
 static void
-dissect_0ad_pause(tvbuff_t *tvb)
+dissect_0ad_pause(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad)
 {
 	/* User GUID */
-	dissect_0ad_string(tvb, hf_user_guid_length, hf_user_guid, tree_0ad);
+	gchar *user_guid = "";
+	gchar *username = dissect_0ad_user_guid(tvb, user_guid);
 
-	/* Ban boolean */
+	/* Paused flag */
+	const gboolean paused = tvb_get_guint8(tvb, offset);
 	proto_tree_add_item(tree_0ad, hf_pause_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
+
+	/* TODO: look up the name of client peers otherwise */
+	if (strlen(username)) {
+		proto_item_append_text(tree_item_0ad, " %s", username);
+		col_append_fstr(pinfo->cinfo, COL_INFO, " %s", username);
+	}
+
+	if (!paused) {
+		proto_item_append_text(tree_item_0ad, " (Unpaused)");
+		col_append_fstr(pinfo->cinfo, COL_INFO, " (Unpaused)");
+	}
 }
 #endif
 
@@ -1201,8 +1238,9 @@ dissect_0ad_disconnect(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_
 	offset += 4;
 
 	/* Update column info*/
-	proto_item_append_text(tree_item_0ad, " Disconnect (%s)", disconnect_reason_text);
-	col_append_fstr(pinfo->cinfo, COL_INFO, " Disconnect (%s)", disconnect_reason_text);
+	/* TODO: show username */
+	proto_item_append_text(tree_item_0ad, " (%s)", disconnect_reason_text);
+	col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)", disconnect_reason_text);
 }
 
 
@@ -1263,15 +1301,15 @@ dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad
 		case 13 + COMMAND_OFFSET2: dissect_0ad_file_transfer_acknowledge(tvb); break;
 		case 14 + COMMAND_OFFSET2: /* join sync start */ break;
 #if GAMEVERSION >= 19
-		case 15 + COMMAND_OFFSET2: dissect_0ad_rejoined(tvb); break;
-		case 16 + COMMAND_OFFSET2: dissect_0ad_kicked(tvb); break;
+		case 15 + COMMAND_OFFSET2: dissect_0ad_rejoined(tvb, pinfo, tree_item_0ad); break;
+		case 16 + COMMAND_OFFSET2: dissect_0ad_kicked(tvb, pinfo, tree_item_0ad); break;
 #endif
 #if GAMEVERSION >= 20
-		case 17 + COMMAND_OFFSET2: dissect_0ad_timeout(tvb); break;
-		case 18 + COMMAND_OFFSET2: dissect_0ad_performance(tvb); break;
+		case 17 + COMMAND_OFFSET2: dissect_0ad_timeout(tvb, pinfo, tree_item_0ad); break;
+		case 18 + COMMAND_OFFSET2: dissect_0ad_performance(tvb, pinfo, tree_item_0ad); break;
 #endif
 #if GAMEVERSION >= 21
-		case 19 + COMMAND_OFFSET2: dissect_0ad_pause(tvb); break;
+		case 19 + COMMAND_OFFSET2: dissect_0ad_pause(tvb, pinfo, tree_item_0ad); break;
 #endif
 		case 15 + COMMAND_OFFSET3: dissect_0ad_loaded_game(tvb); break;
 		case 16 + COMMAND_OFFSET3: /* game start */ break;
