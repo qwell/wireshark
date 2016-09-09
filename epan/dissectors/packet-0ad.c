@@ -144,47 +144,87 @@ static const value_string ProtocolMagic[] = {
 
 #define COMMAND_OFFSET3 COMMAND_OFFSET2+COMMAND_OFFSET4
 
-
-static const value_string NetMessageTypes[] = {
-	{ 0, "Invalid" },
-	{ 1, "Server Handshake" },
-	{ 2, "Client Handshake" },
-	{ 3, "Server Handshake Response" },
-	{ 4, "Authentication" },
-	{ 5, "Authentication Result" },
-	{ 6, "Chat" },
-	{ 7, "Ready" },
+/* Actual command IDs */
+#define COMMAND_INVALID                     0
+#define COMMAND_HANDSHAKE_SERVER            1
+#define COMMAND_HANDSHAKE_CLIENT            2
+#define COMMAND_HANDSHAKE_SERVER_RESPONSE   3
+#define COMMAND_AUTHENTICATION              4
+#define COMMAND_AUTHENTICATION_RESULT       5
+#define COMMAND_CHAT                        6
+#define COMMAND_READY                       7
 #if GAMEVERSION >= 21
-	{ 8, "Clear Ready" },
+#define COMMAND_CLEAR_READY                 8
 #endif
-	{ 8 + COMMAND_OFFSET1, "Game Setup" },
+#define COMMAND_GAMESETUP                   8 + COMMAND_OFFSET1
 #if GAMEVERSION >= 21
-	{ 9 + COMMAND_OFFSET1, "Player Assignment Request" },
+#define COMMAND_PLAYER_ASSIGNMENT_REQUEST   9 + COMMAND_OFFSET1
 #endif
-	{ 9 + COMMAND_OFFSET2, "Player Assignments" },
-	{ 10 + COMMAND_OFFSET2, "File Transfer Request" },
-	{ 11 + COMMAND_OFFSET2, "File Transfer Response" },
-	{ 12 + COMMAND_OFFSET2, "File Transfer Data" },
-	{ 13 + COMMAND_OFFSET2, "File Transfer Acknowledge" },
-	{ 14 + COMMAND_OFFSET2, "Join Sync Start" },
+#define COMMAND_PLAYER_ASSIGNMENTS          9 + COMMAND_OFFSET2
+#define COMMAND_FILE_TRANSFER_REQUEST      10 + COMMAND_OFFSET2
+#define COMMAND_FILE_TRANSFER_RESPONSE     11 + COMMAND_OFFSET2
+#define COMMAND_FILE_TRANSFER_DATA         12 + COMMAND_OFFSET2
+#define COMMAND_FILE_TRANSFER_ACKNOWLEDGE  13 + COMMAND_OFFSET2
+#define COMMAND_JOIN_SYNC_START            14 + COMMAND_OFFSET2
 #if GAMEVERSION >= 19
-	{ 15 + COMMAND_OFFSET2, "Client Rejoined" },
-	{ 16 + COMMAND_OFFSET2, "Client Kicked" },
+#define COMMAND_CLIENT_REJOINED            15 + COMMAND_OFFSET2
+#define COMMAND_CLIENT_KICKED              16 + COMMAND_OFFSET2
 #endif
 #if GAMEVERSION >= 20
-	{ 17 + COMMAND_OFFSET2, "Client Timeout" },
-	{ 18 + COMMAND_OFFSET2, "Client Performance" },
+#define COMMAND_CLIENT_TIMEOUT             17 + COMMAND_OFFSET2
+#define COMMAND_CLIENT_PERFORMANCE         18 + COMMAND_OFFSET2
 #endif
 #if GAMEVERSION >= 21
-	{ 19 + COMMAND_OFFSET2, "Client Paused" },
+#define COMMAND_CLIENT_PAUSED              19 + COMMAND_OFFSET2
 #endif
-	{ 15 + COMMAND_OFFSET3, "Loaded Game" },
-	{ 16 + COMMAND_OFFSET3, "Game Start" },
-	{ 17 + COMMAND_OFFSET3, "End Command Batch"},
-	{ 18 + COMMAND_OFFSET3, "Synchronization Check"},
-	{ 19 + COMMAND_OFFSET3, "Synchronization Error"},
-	{ 20 + COMMAND_OFFSET3, "Simulation Command"},
-	{ 21 + COMMAND_OFFSET3, NULL }
+#define COMMAND_LOADED_GAME                15 + COMMAND_OFFSET3
+#define COMMAND_GAME_START                 16 + COMMAND_OFFSET3
+#define COMMAND_END_COMMAND_BATCH          17 + COMMAND_OFFSET3
+#define COMMAND_SYNCHRONIZATION_CHECK      18 + COMMAND_OFFSET3
+#define COMMAND_SYNCHRONIZATION_ERROR      19 + COMMAND_OFFSET3
+#define COMMAND_SIMULATION_COMMAND         20 + COMMAND_OFFSET3
+#define COMMAND_NULL                       21 + COMMAND_OFFSET3
+
+static const value_string NetMessageTypes[] = {
+	{ COMMAND_INVALID, "Invalid" },
+	{ COMMAND_HANDSHAKE_SERVER, "Server Handshake" },
+	{ COMMAND_HANDSHAKE_CLIENT, "Client Handshake" },
+	{ COMMAND_HANDSHAKE_SERVER_RESPONSE, "Server Handshake Response" },
+	{ COMMAND_AUTHENTICATION, "Authentication" },
+	{ COMMAND_AUTHENTICATION_RESULT, "Authentication Result" },
+	{ COMMAND_CHAT, "Chat" },
+	{ COMMAND_READY, "Ready" },
+#if GAMEVERSION >= 21
+	{ COMMAND_CLEAR_READY, "Clear Ready" },
+#endif
+	{ COMMAND_GAMESETUP, "Game Setup" },
+#if GAMEVERSION >= 21
+	{ COMMAND_PLAYER_ASSIGNMENT_REQUEST, "Player Assignment Request" },
+#endif
+	{ COMMAND_PLAYER_ASSIGNMENTS, "Player Assignments" },
+	{ COMMAND_FILE_TRANSFER_REQUEST, "File Transfer Request" },
+	{ COMMAND_FILE_TRANSFER_RESPONSE, "File Transfer Response" },
+	{ COMMAND_FILE_TRANSFER_DATA, "File Transfer Data" },
+	{ COMMAND_FILE_TRANSFER_ACKNOWLEDGE, "File Transfer Acknowledge" },
+	{ COMMAND_JOIN_SYNC_START, "Join Sync Start" },
+#if GAMEVERSION >= 19
+	{ COMMAND_CLIENT_REJOINED, "Client Rejoined" },
+	{ COMMAND_CLIENT_KICKED, "Client Kicked" },
+#endif
+#if GAMEVERSION >= 20
+	{ COMMAND_CLIENT_TIMEOUT, "Client Timeout" },
+	{ COMMAND_CLIENT_PERFORMANCE, "Client Performance" },
+#endif
+#if GAMEVERSION >= 21
+	{ COMMAND_CLIENT_PAUSED, "Client Paused" },
+#endif
+	{ COMMAND_LOADED_GAME, "Loaded Game" },
+	{ COMMAND_GAME_START, "Game Start" },
+	{ COMMAND_END_COMMAND_BATCH, "End Command Batch"},
+	{ COMMAND_SYNCHRONIZATION_CHECK, "Synchronization Check"},
+	{ COMMAND_SYNCHRONIZATION_ERROR, "Synchronization Error"},
+	{ COMMAND_SIMULATION_COMMAND, "Simulation Command"},
+	{ COMMAND_NULL, NULL }
 };
 
 static const value_string AuthenticationResult[] = {
@@ -1310,43 +1350,43 @@ dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad
 
 	/* Dissect specific message */
 	switch(messageType) {
-		case 1: dissect_0ad_handshake(tvb, pinfo); break;
-		case 2: dissect_0ad_handshake(tvb, pinfo); break;
-		case 3: dissect_0ad_server_handshake_response(tvb, pinfo); break;
-		case 4: dissect_0ad_authentication(tvb); break;
-		case 5: dissect_0ad_authentication_result(tvb); break;
-		case 6: dissect_0ad_chat(tvb, pinfo); break;
-		case 7: dissect_0ad_ready(tvb, pinfo); break;
+		case COMMAND_HANDSHAKE_SERVER: dissect_0ad_handshake(tvb, pinfo); break;
+		case COMMAND_HANDSHAKE_CLIENT: dissect_0ad_handshake(tvb, pinfo); break;
+		case COMMAND_HANDSHAKE_SERVER_RESPONSE: dissect_0ad_server_handshake_response(tvb, pinfo); break;
+		case COMMAND_AUTHENTICATION: dissect_0ad_authentication(tvb); break;
+		case COMMAND_AUTHENTICATION_RESULT: dissect_0ad_authentication_result(tvb); break;
+		case COMMAND_CHAT: dissect_0ad_chat(tvb, pinfo); break;
+		case COMMAND_READY: dissect_0ad_ready(tvb, pinfo); break;
 #if GAMEVERSION >= 21
-		case 8: /* clear all ready */ break;
+		case COMMAND_CLEAR_READY: /* clear all ready */ break;
 #endif
-		case 8 + COMMAND_OFFSET1: dissect_0ad_gamesetup(tvb, tree_item_0ad); break;
+		case COMMAND_GAMESETUP: dissect_0ad_gamesetup(tvb, tree_item_0ad); break;
 #if GAMEVERSION >= 21
-		case 9 + COMMAND_OFFSET1: dissect_0ad_player_assignment_request(tvb, pinfo); break;
+		case COMMAND_PLAYER_ASSIGNMENT_REQUEST: dissect_0ad_player_assignment_request(tvb, pinfo); break;
 #endif
-		case 9 + COMMAND_OFFSET2: dissect_0ad_player_assignments(tvb, pinfo); break;
-		case 10 + COMMAND_OFFSET2: dissect_0ad_file_transfer_request(tvb); break;
-		case 11 + COMMAND_OFFSET2: dissect_0ad_file_transfer_response(tvb); break;
-		case 12 + COMMAND_OFFSET2: dissect_0ad_file_transfer_data(tvb, pinfo); break;
-		case 13 + COMMAND_OFFSET2: dissect_0ad_file_transfer_acknowledge(tvb); break;
-		case 14 + COMMAND_OFFSET2: /* join sync start */ break;
+		case COMMAND_PLAYER_ASSIGNMENTS: dissect_0ad_player_assignments(tvb, pinfo); break;
+		case COMMAND_FILE_TRANSFER_REQUEST: dissect_0ad_file_transfer_request(tvb); break;
+		case COMMAND_FILE_TRANSFER_RESPONSE: dissect_0ad_file_transfer_response(tvb); break;
+		case COMMAND_FILE_TRANSFER_DATA: dissect_0ad_file_transfer_data(tvb, pinfo); break;
+		case COMMAND_FILE_TRANSFER_ACKNOWLEDGE: dissect_0ad_file_transfer_acknowledge(tvb); break;
+		case COMMAND_JOIN_SYNC_START: /* join sync start */ break;
 #if GAMEVERSION >= 19
-		case 15 + COMMAND_OFFSET2: dissect_0ad_rejoined(tvb, pinfo, tree_item_0ad); break;
-		case 16 + COMMAND_OFFSET2: dissect_0ad_kicked(tvb, pinfo, tree_item_0ad); break;
+		case COMMAND_CLIENT_REJOINED: dissect_0ad_rejoined(tvb, pinfo, tree_item_0ad); break;
+		case COMMAND_CLIENT_KICKED: dissect_0ad_kicked(tvb, pinfo, tree_item_0ad); break;
 #endif
 #if GAMEVERSION >= 20
-		case 17 + COMMAND_OFFSET2: dissect_0ad_timeout(tvb, pinfo, tree_item_0ad); break;
-		case 18 + COMMAND_OFFSET2: dissect_0ad_performance(tvb, pinfo, tree_item_0ad); break;
+		case COMMAND_CLIENT_TIMEOUT: dissect_0ad_timeout(tvb, pinfo, tree_item_0ad); break;
+		case COMMAND_CLIENT_PERFORMANCE: dissect_0ad_performance(tvb, pinfo, tree_item_0ad); break;
 #endif
 #if GAMEVERSION >= 21
-		case 19 + COMMAND_OFFSET2: dissect_0ad_pause(tvb, pinfo, tree_item_0ad); break;
+		case COMMAND_CLIENT_PAUSED: dissect_0ad_pause(tvb, pinfo, tree_item_0ad); break;
 #endif
-		case 15 + COMMAND_OFFSET3: dissect_0ad_loaded_game(tvb); break;
-		case 16 + COMMAND_OFFSET3: /* game start */ break;
-		case 17 + COMMAND_OFFSET3: dissect_0ad_end_command_batch(tvb); break;
-		case 18 + COMMAND_OFFSET3: dissect_0ad_sync(tvb); break;
-		case 19 + COMMAND_OFFSET3: dissect_0ad_sync(tvb); break;
-		case 20 + COMMAND_OFFSET3: dissect_0ad_simulation_command(tvb, tree_item_0ad); break;
+		case COMMAND_LOADED_GAME: dissect_0ad_loaded_game(tvb); break;
+		case COMMAND_GAME_START: /* game start */ break;
+		case COMMAND_END_COMMAND_BATCH: dissect_0ad_end_command_batch(tvb); break;
+		case COMMAND_SYNCHRONIZATION_CHECK: dissect_0ad_sync(tvb); break;
+		case COMMAND_SYNCHRONIZATION_ERROR: dissect_0ad_sync(tvb); break;
+		case COMMAND_SIMULATION_COMMAND: dissect_0ad_simulation_command(tvb, tree_item_0ad); break;
 		default: break;
 	}
 }
