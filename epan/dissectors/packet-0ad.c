@@ -104,19 +104,6 @@ static const value_string ScriptTypes[] = {
 	{ SCRIPT_TYPE_OBJECT_SET, "Object Set" }
 };
 
-/*
-{
-	SCRIPT_TYPED_ARRAY_INT8 = 0,
-	SCRIPT_TYPED_ARRAY_UINT8 = 1,
-	SCRIPT_TYPED_ARRAY_INT16 = 2,
-	SCRIPT_TYPED_ARRAY_UINT16 = 3,
-	SCRIPT_TYPED_ARRAY_INT32 = 4,
-	SCRIPT_TYPED_ARRAY_UINT32 = 5,
-	SCRIPT_TYPED_ARRAY_FLOAT32 = 6,
-	SCRIPT_TYPED_ARRAY_FLOAT64 = 7,
-	SCRIPT_TYPED_ARRAY_UINT8_CLAMPED = 8
-};*/
-
 /* The protocol version has changed only a few times. */
 static const value_string ProtocolVersion[] = {
 	{ PS_PROTOCOL_VERSION_PRE_ALPHA_1_2, "Pre-Alpha 1 or 2" },
@@ -704,32 +691,6 @@ dissect_0ad_wide_string(tvbuff_t *tvb, gint hf_string, proto_tree *tree, guint e
 	return string;
 }
 
-/* Registers a new arbitrary element. */
-/*static void register_0ad_script_element(int *p_id, const guint type, const gchar *parent_field, const gchar *fieldname)
-{
-	static int hf_id;
-	hf_register_info hfri;
-	hfri.p_id				= &hf_id;
-	hfri.hfinfo.name		= fieldname;
-	hfri.hfinfo.abbrev		= g_strdup_printf("%s.%s", parent_field, g_utf8_strdown(fieldname, strlen(fieldname)));
-	switch(type) {
-		case SCRIPT_TYPE_STRING: hfri.hfinfo.type = FT_STRING; hfri.hfinfo.display = BASE_NONE; break;
-		case SCRIPT_TYPE_INT:	hfri.hfinfo.type = FT_UINT32; hfri.hfinfo.display = BASE_DEC; break;
-		case SCRIPT_TYPE_BOOLEAN: hfri.hfinfo.type = FT_UINT8; hfri.hfinfo.display = BASE_HEX; break;
-		default: break;
-	}
-	hfri.hfinfo.strings		= NULL;
-	hfri.hfinfo.bitmask		= 0x0;
-	hfri.hfinfo.blurb		= NULL;
-	hfri.hfinfo.id			= 0;
-	hfri.hfinfo.parent		= 0;
-	hfri.hfinfo.ref_type	= HF_REF_TYPE_NONE;
-	hfri.hfinfo.same_name_next = NULL;
-	hfri.hfinfo.same_name_prev_id = -1;
-
-	wmem_array_append_one(hf, hfri);
-}*/
-
 /* Script parsing functions */
 static guint32
 dissect_0ad_script_integer(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tree, guint encoding)
@@ -808,8 +769,6 @@ dissect_0ad_script_element(tvbuff_t *tvb, const gchar *parent_field, const gchar
 static void
 dissect_0ad_script_array(tvbuff_t *tvb, const gchar *parent_field, const gchar *fieldname, guint8 type, proto_tree *tree, guint encoding)
 {
-	/* TODO: Create subtree */
-	/*const gchar *type_name = val_to_str(type, ScriptTypes, "Unknown (0x%02x)");*/
 	proto_item *ti = NULL;
 	proto_tree *tree_array = proto_tree_add_subtree(tree, tvb,
 			offset, 0, ett_0ad_script_array_subtree, &ti, fieldname);
@@ -857,12 +816,11 @@ dissect_0ad_script_element(tvbuff_t *tvb, const gchar *parent_field, const gchar
 		case SCRIPT_TYPE_INT: dissect_0ad_script_integer(tvb, fieldname, tree, encoding); break;
 		case SCRIPT_TYPE_DOUBLE: dissect_0ad_script_double(tvb, fieldname, tree, encoding); break;
 		case SCRIPT_TYPE_BOOLEAN: dissect_0ad_script_boolean(tvb, fieldname, tree, encoding); break;
-		default: break;//g_print("NOT SUPPORTED"); /* TODO: throw not supported error */ break;
+		default: break; // Other types are not supported as they are not used in the networked code yet
 	}
 }
 
 /* Parsing of 0 A.D. messages that utilize the methods above */
-
 static gchar*
 dissect_0ad_user_guid(tvbuff_t *tvb, gchar *user_guid)
 {
