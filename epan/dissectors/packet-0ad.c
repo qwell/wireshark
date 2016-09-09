@@ -478,7 +478,7 @@ static hf_register_info hf[] = {
 		{ "Last Received", "0ad.last_received",
 		FT_UINT32, BASE_DEC,
 		NULL, 0x0,
-		"Unix timestamp stating when the server received the last packet from that client.", HFILL }
+		"Time in milliseconds since the server received the last packet from that client.", HFILL }
 	},
 	{ &hf_mean_rtt,
 		{ "Last Received", "0ad.mean_rtt",
@@ -1215,12 +1215,6 @@ dissect_0ad_message(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree_item_0ad
 	const guint8 messageType = tvb_get_guint8(tvb, offset);
 	const gchar *messageTypeName = val_to_str(messageType, NetMessageTypes, "Unknown (0x%02x)");
 
-	/* Update info column */
-	/*col_clear(pinfo->cinfo, COL_INFO);*/
-
-	/* TODO: Don't clear the info column. */
-	/* Tell ENet not to set the column text, because ENet and 0AD packets are intermingled */
-	/* We need a conversation for that probably */
 	col_append_fstr(pinfo->cinfo, COL_INFO, ", %s" , messageTypeName);
 	proto_item_append_text(tree_item_0ad, " %s", messageTypeName);
 
