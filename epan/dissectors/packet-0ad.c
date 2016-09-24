@@ -64,7 +64,8 @@
 
 /*
  * Custom serialization used for gamesetup and simulation commands.
- * The following constants are defined in SerializedScriptTypes.h
+ * The following constants are defined in SerializedScriptTypes.h.
+ * See also test_Serializer.h for example bytes.
  */
 #define	SCRIPT_TYPE_VOID				0
 #define	SCRIPT_TYPE_NULL				1
