@@ -1,6 +1,6 @@
 /* packet-enet.c
  *
- * Dissector for the UDP peer-to-peer protocol "enet".
+ * Dissector for the UDP peer-to-peer protocol "enet", used in various open source games.
  * Copyright 2016, Alexander Heinsius
  *
  * Wireshark - Network traffic analyzer
@@ -32,6 +32,10 @@
  * That source file is the best source for understanding the ENet protocol.
  */
 #define ENET_PROTOCOL_MAXIMUM_PEER_ID 0xFFF
+
+/*
+ * TODO: 00:05:45          Warn Dissector bug, protocol ENet, in packet 8: More than 1000000 items in the tree -- possible infinite loop
+ */
 
 #define ENET_PROTOCOL_HEADER_SESSION_MASK 3 << 12
 #define ENET_PROTOCOL_HEADER_SESSION_SHIFT 12
