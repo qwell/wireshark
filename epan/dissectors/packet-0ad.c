@@ -283,6 +283,7 @@ static gint hf_script_type = -1;
 static gint hf_script_integer = -1;
 static gint hf_script_double = -1;
 static gint hf_script_bool = -1;
+static gint hf_script_backref = -1;
 static gint hf_script_string = -1;
 
 static gint hf_message_type = -1;
@@ -763,6 +764,16 @@ dissect_0ad_script_boolean(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tr
 	return value;
 }
 
+static gboolean
+dissect_0ad_script_backref(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tree, guint encoding)
+{
+	const guint32 tag = tvb_get_guint32(tvb, offset, encoding);
+	proto_item *ti = proto_tree_add_item(tree, hf_script_backref, tvb, offset, 4, encoding);
+	proto_item_set_text(ti, "%s: %u", fieldname, tag);
+	offset += 4;
+	return tag;
+}
+
 static gchar*
 dissect_0ad_script_string(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tree, guint encoding)
 {
@@ -857,6 +868,7 @@ dissect_0ad_script_element(tvbuff_t *tvb, const gchar *parent_field, const gchar
 		case SCRIPT_TYPE_INT: dissect_0ad_script_integer(tvb, fieldname, tree, encoding); break;
 		case SCRIPT_TYPE_DOUBLE: dissect_0ad_script_double(tvb, fieldname, tree, encoding); break;
 		case SCRIPT_TYPE_BOOLEAN: dissect_0ad_script_boolean(tvb, fieldname, tree, encoding); break;
+		case SCRIPT_TYPE_BACKREF: dissect_0ad_script_backref(tvb, fieldname, tree, encoding); break;
 		default: break; // Other types are not supported as they are not used in the networked code yet
 	}
 }
