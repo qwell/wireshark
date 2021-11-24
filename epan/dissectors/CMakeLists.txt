@@ -1035,7 +1035,6 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-elmi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-enc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-enet.c
-	${CMAKE_CURRENT_SOURCE_DIR}/packet-enet.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-enip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-enrp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-enttec.c
