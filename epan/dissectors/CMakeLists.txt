@@ -1085,6 +1085,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ff.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-finger.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-fip.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-fivem.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-fix.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-flexnet.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-flexray.c
