@@ -114,14 +114,14 @@ static void dissect_msgpack_integer(tvbuff_t *tvb, packet_info *pinfo, proto_tre
         break;
     case 0xce:
         uint32 = tvb_get_ntohl(tvb, *offset + 1);
-        proto_tree_add_uint_format(tree, hf_msgpack_uint_32, tvb, *offset, 5, uint32, "%s: %lu", label, uint32);
+        proto_tree_add_uint_format(tree, hf_msgpack_uint_32, tvb, *offset, 5, uint32, "%s: %u", label, uint32);
         if (value)
             *value = wmem_strdup_printf(pinfo->pool, "%u", uint32);
         *offset += 5;
         break;
     case 0xcf:
         uint64 = tvb_get_ntoh64(tvb, *offset + 1);
-        proto_tree_add_uint64_format(tree, hf_msgpack_uint_64, tvb, *offset, 9, uint64, "%s: %llu", label, uint64);
+        proto_tree_add_uint64_format(tree, hf_msgpack_uint_64, tvb, *offset, 9, uint64, "%s: %lu", label, uint64);
         if (value)
             *value = wmem_strdup_printf(pinfo->pool, "%" G_GINT64_MODIFIER "u", uint64);
         *offset += 9;
@@ -142,14 +142,14 @@ static void dissect_msgpack_integer(tvbuff_t *tvb, packet_info *pinfo, proto_tre
         break;
     case 0xd2:
         int32 = tvb_get_ntohl(tvb, *offset + 1);
-        proto_tree_add_int_format(tree, hf_msgpack_int_32, tvb, *offset, 5, int32, "%s: %ld", label, int32);
+        proto_tree_add_int_format(tree, hf_msgpack_int_32, tvb, *offset, 5, int32, "%s: %d", label, int32);
         if (value)
             *value = wmem_strdup_printf(pinfo->pool, "%d", int32);
         *offset += 5;
         break;
     case 0xd3:
         int64 = tvb_get_ntoh64(tvb, *offset + 1);
-        proto_tree_add_int64_format(tree, hf_msgpack_int_64, tvb, *offset, 9, int64, "%s: %lld", label, int64);
+        proto_tree_add_int64_format(tree, hf_msgpack_int_64, tvb, *offset, 9, int64, "%s: %ld", label, int64);
         if (value)
             *value = wmem_strdup_printf(pinfo->pool, "%" G_GINT64_MODIFIER "d", int64);
         *offset += 9;
