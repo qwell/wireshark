@@ -744,10 +744,10 @@ dissect_0ad_script_integer(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tr
 	return value;
 }
 
-static guint32
+static gdouble
 dissect_0ad_script_double(tvbuff_t *tvb, const gchar *fieldname, proto_tree *tree, guint encoding)
 {
-	const gfloat value = tvb_get_ieee_double(tvb, offset, encoding);
+	const gdouble value = tvb_get_ieee_double(tvb, offset, encoding);
 	proto_item *ti = proto_tree_add_item(tree, hf_script_double, tvb, offset, 8, encoding);
 	proto_item_set_text(ti, "%s: %f", fieldname, value);
 	offset += 8;
@@ -1152,7 +1152,7 @@ dissect_0ad_file_transfer_data(tvbuff_t *tvb, packet_info *pinfo)
 		tree_0ad);
 
 	if (!tvb_payload)
-		tvb_payload = tvb_new_subset(tvb, offset, dataLength, dataLength);
+		tvb_payload = tvb_new_subset_length_caplen(tvb, offset, dataLength, dataLength);
 
 	/* TODO: packetnumber seems wrong, doesn't reset to zero on second pass, save it in the packet info */
 
