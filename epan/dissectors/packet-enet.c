@@ -64,7 +64,6 @@ static const value_string enet_commands[] = {
         { 14, NULL }
 };
 
-static guint32 offset = 0;
 static proto_tree *enet_tree = NULL;
 
 static dissector_handle_t handle_data;
