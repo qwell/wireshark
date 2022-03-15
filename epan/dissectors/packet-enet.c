@@ -442,11 +442,17 @@ static const fragment_items msg_frag_items = {
     "Message fragments"
 };
 
-static void enet_dissect_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+typedef struct enet_command_header {
+    guint8 command;
+    guint8 channel;
+    guint16 sequence;
+} enet_command_header;
+
+static void enet_dissect_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, enet_command_header *header)
 {
     heur_dtbl_entry_t *hdtbl_entry;
 
-    if (!dissector_try_heuristic(heur_subdissector_list, tvb, pinfo, tree, &hdtbl_entry, NULL))
+    if (!dissector_try_heuristic(heur_subdissector_list, tvb, pinfo, tree, &hdtbl_entry, header))
         call_dissector(handle_data, tvb, pinfo, tree);
 }
 
@@ -565,7 +571,7 @@ dissect_enet_disconnect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *command_t
     const gint remaining = MIN(4, tvb_captured_length_remaining(tvb, *offset));
     tvbuff_t *tvb_payload = tvb_new_subset_length_caplen(tvb, *offset, remaining, 4);
     proto_tree_add_item(command_tree, hf_disconnect_data, tvb, *offset, 4, ENC_BIG_ENDIAN);
-    enet_dissect_payload(tvb_payload, pinfo, tree);
+    enet_dissect_payload(tvb_payload, pinfo, tree, NULL);
     *offset += 4;
 }
 
@@ -584,12 +590,12 @@ dissect_enet_send_reliable(tvbuff_t *tvb, packet_info *pinfo, proto_tree *comman
     proto_tree_add_item(command_tree, hf_payload, tvb, *offset, payload_length, ENC_BIG_ENDIAN);
     remaining = MIN(payload_length, tvb_captured_length_remaining(tvb, *offset));
     tvb_payload = tvb_new_subset_length_caplen(tvb, *offset, remaining, payload_length);
-    enet_dissect_payload(tvb_payload, pinfo, tree);
+    enet_dissect_payload(tvb_payload, pinfo, tree, NULL);
     *offset += payload_length;
 }
 
 static void
-dissect_enet_send_unreliable(tvbuff_t *tvb, packet_info *pinfo, proto_tree *command_tree, proto_tree *tree, gint *offset)
+dissect_enet_send_unreliable(tvbuff_t *tvb, packet_info *pinfo, proto_tree *command_tree, proto_tree *tree, gint *offset, enet_command_header *header)
 {
     tvbuff_t *tvb_payload;
     gint remaining;
@@ -608,8 +614,8 @@ dissect_enet_send_unreliable(tvbuff_t *tvb, packet_info *pinfo, proto_tree *comm
     proto_tree_add_item(command_tree, hf_payload, tvb, *offset, payload_length, ENC_BIG_ENDIAN);
     remaining = MIN(payload_length, tvb_captured_length_remaining(tvb, *offset));
     tvb_payload = tvb_new_subset_length_caplen(tvb, *offset, remaining, payload_length);
-    enet_dissect_payload(tvb_payload, pinfo, tree);
-    *offset += hf_payload_length;
+    enet_dissect_payload(tvb_payload, pinfo, tree, header);
+    *offset += payload_length;
 }
 
 static void
@@ -683,8 +689,9 @@ dissect_enet_send_fragment(tvbuff_t *tvb, packet_info *pinfo, proto_tree *comman
     if (tvb_payload) {
         g_hash_table_add(table_reassembled_sequenceIDs, GUINT_TO_POINTER(fragment_start_sequence_number));
         col_append_fstr(pinfo->cinfo, COL_INFO, " (%u of %u, Reassembled)", fragment_number + 1, fragment_count);
-        enet_dissect_payload(tvb_payload, pinfo, tree);
-    } else
+        enet_dissect_payload(tvb_payload, pinfo, tree, NULL);
+    }
+    else
         col_append_fstr(pinfo->cinfo, COL_INFO, " (%u of %u)", fragment_number + 1, fragment_count);
 
     *offset += payload_length;
@@ -707,7 +714,7 @@ dissect_enet_send_unsequenced(tvbuff_t *tvb, packet_info *pinfo, proto_tree *com
     proto_tree_add_item(command_tree, hf_payload, tvb, *offset, payload_length, ENC_BIG_ENDIAN);
     remaining = MIN(payload_length, tvb_captured_length_remaining(tvb, *offset));
     tvb_payload = tvb_new_subset_length_caplen(tvb, *offset, remaining, payload_length);
-    enet_dissect_payload(tvb_payload, pinfo, tree);
+    enet_dissect_payload(tvb_payload, pinfo, tree, NULL);
     *offset += payload_length;
 }
 
@@ -748,12 +755,16 @@ dissect_enet_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *
     *offset += 1;
 
     /* Channel */
+    const guint8 channel = tvb_get_gint8(tvb, *offset);
     proto_tree_add_item(command_tree, hf_channel, tvb, *offset, 1, ENC_BIG_ENDIAN);
     *offset += 1;
 
     /* Sequence number */
+    const guint16 sequence = tvb_get_gint16(tvb, *offset, ENC_BIG_ENDIAN);
     proto_tree_add_item(command_tree, hf_sequence_number, tvb, *offset, 2, ENC_BIG_ENDIAN);
     *offset += 2;
+
+    enet_command_header header = { command, channel, sequence };
 
     /* Dissect command */
     switch (command) {
@@ -763,7 +774,7 @@ dissect_enet_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gint *
     case 4: dissect_enet_disconnect(tvb, pinfo, command_tree, tree, offset); break;
     case 5: /* ping */ break;
     case 6: dissect_enet_send_reliable(tvb, pinfo, command_tree, tree, offset); break;
-    case 7: dissect_enet_send_unreliable(tvb, pinfo, command_tree, tree, offset); break;
+    case 7: dissect_enet_send_unreliable(tvb, pinfo, command_tree, tree, offset, &header); break;
     case 8: dissect_enet_send_fragment(tvb, pinfo, command_tree, tree, offset); break;
     case 9: dissect_enet_send_unsequenced(tvb, pinfo, command_tree, tree, offset); break;
     case 10: dissect_enet_bandwidth_limit(tvb, command_tree, offset); break;
@@ -876,6 +887,7 @@ proto_reg_handoff_enet(void)
 {
     dissector_handle_t handle_enet = create_dissector_handle(dissect_enet, proto_enet);
     dissector_add_for_decode_as("udp.port", handle_enet);
+    dissector_add_for_decode_as("tcp.port", handle_enet);
 
     handle_data = find_dissector("data");
 }
