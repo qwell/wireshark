@@ -58,6 +58,10 @@ set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT
 
 include( CMakeOptions.txt )
 
+# We require minimum C11
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 # We require minimum C++11
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -65,11 +69,20 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 message(STATUS "Generating build using CMake ${CMAKE_VERSION}")
 
-# Avoid an empty build type. If this is already set it does nothing.
-set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING
-		"Choose the build configuration (one of Debug, MinSizeRel, RelWithDebInfo, Release)")
+# Set a default build type if none was specified
+set(_default_build_type "RelWithDebInfo")
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+	set(CMAKE_BUILD_TYPE "${_default_build_type}" CACHE STRING "Choose the type of build." FORCE)
+	# Set the possible values of build type for cmake-gui
+	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
 # Build type is ignored by multi-config generators.
-message(STATUS "Using ${CMAKE_GENERATOR} generator and build type ${CMAKE_BUILD_TYPE}")
+if (NOT CMAKE_CONFIGURATION_TYPES)
+	message(STATUS "Using \"${CMAKE_GENERATOR}\" generator and build type \"${CMAKE_BUILD_TYPE}\"")
+else()
+	message(STATUS "Using \"${CMAKE_GENERATOR}\" generator (multi-config)")
+endif()
 
 #Where to find local cmake scripts
 set(WS_CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
@@ -236,7 +249,7 @@ include(GNUInstallDirs)
 
 set(PROJECT_INSTALL_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}")
 
-# Make sure our executables can can load our libraries if we install into
+# Make sure our executables can load our libraries if we install into
 # a non-default directory on Unix-like systems other than macOS.
 # https://gitlab.kitware.com/cmake/community/wikis/doc/cmake/RPATH-handling
 set(LIBRARY_INSTALL_RPATH "")
@@ -451,8 +464,8 @@ set_property(DIRECTORY
 	PROPERTY COMPILE_DEFINITIONS
 		"G_DISABLE_DEPRECATED"
 		"G_DISABLE_SINGLE_INCLUDES"
-		$<$<OR:$<BOOL:${DISABLE_ASSERT}>,$<CONFIG:Release>>:WS_DISABLE_ASSERT>
-		$<$<OR:$<BOOL:${DISABLE_DEBUG}>,$<CONFIG:Release>>:WS_DISABLE_DEBUG>
+		$<$<OR:$<NOT:$<BOOL:${ENABLE_ASSERT}>>,$<CONFIG:Release>>:WS_DISABLE_ASSERT>
+		$<$<OR:$<NOT:$<BOOL:${ENABLE_DEBUG}>>,$<CONFIG:Release>>:WS_DISABLE_DEBUG>
 )
 
 if(WIN32)
@@ -477,7 +490,7 @@ if(WIN32)
 		# Make sure everyone is using the same API and that it's sufficient
 		# for our needs.
 		# This should match the following:
-		# - The <compatibility><application> section in image\wireshark.exe.manifest.in
+		# - The <compatibility><application> section in resources\wireshark.exe.manifest.in
 		# - The GetWindowsVersion parts of packaging\nsis\wireshark.nsi
 		# - The VersionNT parts of packaging\wix\Prerequisites.wxi
 		#
@@ -498,7 +511,10 @@ if(MINGW)
 endif()
 
 if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
-	if ((MSVC_VERSION LESS "1900") OR (MSVC_VERSION GREATER_EQUAL "2000"))
+	if (MSVC_VERSION LESS "1928")
+		message(FATAL_ERROR "Microsoft Visual Studio 2019 version 16.8 or later is required")
+	endif()
+	if (MSVC_VERSION GREATER_EQUAL "2000")
 		message(FATAL_ERROR "You are using an unsupported version of MSVC")
 	endif()
 
@@ -563,9 +579,21 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	## 4295: array is too small to include a terminating null character
 	## 4100: unreferenced formal parameter
 	## 4189: local variable is initialized but not referenced
-	# Disable warnings about about use of flexible array members:
+	# Disable warnings about use of flexible array members:
 	## 4200: nonstandard extension used : zero-sized array in struct/union
 	list(APPEND LOCAL_CFLAGS /w34295 /w34100 /w34189 /wd4200)
+
+	# MSVC 14.28 + C11 enables C5105, but older Windows SDKs aren't completely compatible.
+	# Windows SDK 10.0.17763.0 generates syntax errors with C11 enabled.
+	if (CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS 10.0.18362.0)
+		message(FATAL_ERROR "Windows SDK ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION} doesn't support C11. Please make sure you're using 10.0.20348.0 or later.")
+	endif()
+	# Windows SDK 10.0.18362.0 to 10.0.19041.685 generate warning C5105 with C11 enabled.
+	if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS 10.0.20348.0)
+		message(WARNING "Windows SDK ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION} doesn't support C11. Please make sure you're using 10.0.20348.0 or later.")
+		## 5105: macro expansion producing 'defined' has undefined behavior
+		list(APPEND LOCAL_CFLAGS /wd5105)
+	endif()
 
 	# We've matched these to specific compiler versions using the
 	# checks above. There's no need to pass them to check_c_compiler_flag
@@ -585,87 +613,6 @@ else() # ! MSVC
 			endif()
 			set(MIN_MACOS_VERSION ${CMAKE_OSX_DEPLOYMENT_TARGET})
 		endif()
-	endif()
-
-	#
-	# Do whatever is necessary to enable as much C99 support as
-	# possible in the C compiler.  Newer versions of compilers
-	# might default to supporting C99, but older versions may
-	# require a special flag.
-	#
-	# We do not want strict C99 support, as we may also want to
-	# use compiler extensions.
-	#
-	# Prior to CMake 3.1, setting CMAKE_C_STANDARD will not have
-	# any effect, so, unless and until we require CMake 3.1 or
-	# later, we have to do it ourselves on pre-3.1 CMake, so we
-	# just do it ourselves on all versions of CMake.
-	#
-	# Note: with CMake 3.1 through 3.5, the only compilers for
-	# which CMake handles CMAKE_C_STANDARD are GCC and Clang.
-	# 3.6 adds support only for Intel C; 3.9 adds support for
-	# PGI C, Sun C, and IBM XL C, and 3.10 adds support for
-	# Cray C and IAR C, but no version of CMake has support for
-	# HP C.  Therefore, even if we use CMAKE_C_STANDARD with
-	# compilers for which CMake supports it, we may still have
-	# to do it ourselves on other compilers.
-	#
-	# In addition, CMake 3.5.2 seems to think that GCC versions
-	# less than 4.4 don't support -std=gnu99, which we need in
-	# order to get support for "for (int i = 0; i < n; i++) ;",
-	# which is another reason not to rely on CMake's CMAKE_C_STANDARD
-	# support.
-	#
-	# See the CMake documentation for the CMAKE_<LANG>_COMPILER_ID
-	# variables for a list of compiler IDs.
-	#
-	# We don't worry about MSVC; it doesn't have such a flag -
-	# either it doesn't support the C99 features we need at all,
-	# or it supports them regardless of the compiler flag.
-	#
-	# XXX - we add the flag for a given compiler to CMAKE_C_FLAGS,
-	# so we test whether it works and add it if we do.  We don't
-	# test whether it's necessary in order to get the C99 features
-	# that we use; if we ever have a user who tries to compile with
-	# a compiler that can't be made to support those features, we
-	# can add a test to make sure we actually *have* C99 support.
-	#
-	if(CMAKE_C_COMPILER_ID MATCHES "GNU" OR
-	   CMAKE_C_COMPILER_ID MATCHES "Clang")
-		#
-		# We use -std=gnu99 rather than -std=c99 because, for
-		# some older compilers such as GCC 4.4.7, -std=gnu99
-		# is required to avoid errors about C99 constructs
-		# such as "for (int i = 0; i < n; i++) ;".
-		#
-		set(CMAKE_C_FLAGS "-std=gnu99 ${CMAKE_C_FLAGS}")
-	elseif(CMAKE_C_COMPILER_ID MATCHES "XL")
-		#
-		# We want support for extensions picked up for
-		# GNU C compatibility, so we use -qlanglvl=extc99.
-		#
-		set(CMAKE_C_FLAGS "-qlanglvl=extc99 ${CMAKE_C_FLAGS}")
-	elseif(CMAKE_C_COMPILER_ID MATCHES "HP")
-		#
-		# We also need to add -Wp,-H200000 to handle some large
-		# #defines we have; that flag is not necessary for the
-		# C++ compiler unless the "legacy" C++ preprocessor is
-		# being used (+legacy_cpp).  We don't want the legacy
-		# preprocessor if it's not the default, so we just add
-		# -Wp,-H200000 to the C flags.  (If there are older
-		# versions of aC++ that only support the legacy
-		# preprocessor, and require that we boost the table
-		# size, we'd have to check whether -Wp,-H200000 is
-		# supported by the C++ compiler and add it only if it is.)
-		#
-		set(CMAKE_C_FLAGS "-AC99 -Wp,-H200000 $WS_CFLAGS ${CMAKE_C_FLAGS}")
-	elseif(CMAKE_C_COMPILER_ID MATCHES "Sun")
-		#
-		# We also crank up the warning level.
-		#
-		set(CMAKE_C_FLAGS "-xc99 -v ${CMAKE_C_FLAGS}")
-	elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
-		set(CMAKE_C_FLAGS "-c99 ${CMAKE_C_FLAGS}")
 	endif()
 
 	if(CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -714,6 +661,13 @@ else() # ! MSVC
 		# until these procedural issues can be fixed or at least mitigated.
 		#
 		-Wno-error=maybe-uninitialized
+		#
+		# Converting from g_printf() and g_snprintf() to stdio.h turns
+		# up many of these warnings. They will have to be handled later.
+		# It can be a lot of work to fix properly and none of them
+		# seem to flag very interesting issues.
+		#
+		-Wno-format-truncation
 	)
 
 	#
@@ -1033,7 +987,7 @@ if(MSVC)
 endif()
 
 set(WERROR_COMMON_FLAGS "")
-if(NOT DISABLE_WERROR AND NOT ENABLE_EXTRA_COMPILER_WARNINGS)
+if(ENABLE_WERROR AND NOT ENABLE_EXTRA_COMPILER_WARNINGS)
 	if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		set(WERROR_COMMON_FLAGS "/WX")
 	else()
@@ -1213,7 +1167,7 @@ if (NOT WIN32)
 	find_package(M REQUIRED)
 endif()
 
-if(BUILD_sshdump OR BUILD_ciscodump)
+if(BUILD_sshdump OR BUILD_ciscodump OR BUILD_wifidump)
 	set(ENABLE_LIBSSH ON)
 else()
 	set(ENABLE_LIBSSH OFF)
@@ -1226,8 +1180,12 @@ ws_find_package(Systemd BUILD_sdjournal HAVE_SYSTEMD)
 
 # Build the Qt GUI?
 if(BUILD_wireshark)
-	# Untested, may not work if CMAKE_PREFIX_PATH gets overwritten
-	# somewhere. The if WIN32 in this place is annoying as well.
+	if(USE_qt6)
+		set(qtver "6")
+	else()
+		set(qtver "5")
+	endif()
+	# We used to recommend setting QT5_BASE_DIR and should probably deprecate this at some point.
 	if(WIN32)
 		set(QT5_BASE_PATH "$ENV{QT5_BASE_DIR}")
 		set(CMAKE_PREFIX_PATH "${QT5_BASE_PATH}")
@@ -1243,17 +1201,28 @@ if(BUILD_wireshark)
 		list(APPEND QT_FIND_PACKAGE_OPTIONS PATHS /usr/local/opt/qt5)
 	endif()
 	set(QT_PACKAGELIST
-		Qt5Core
-		Qt5LinguistTools
-		Qt5Multimedia
-		Qt5PrintSupport
-		Qt5Widgets
+		Qt${qtver}Core
+		Qt${qtver}Gui
+		Qt${qtver}LinguistTools
+		# Our code currently does not compile with Qt6Multimedia
+		# Qt${qtver}Multimedia
+		Qt${qtver}PrintSupport
+		Qt${qtver}Widgets
 	)
-	if(APPLE)
-		ws_find_package(Sparkle ENABLE_SPARKLE HAVE_SOFTWARE_UPDATE)
-	endif()
-	if(WIN32)
-		list(APPEND QT_PACKAGELIST Qt5WinExtras)
+	if(USE_qt6)
+		set(CMAKE_CXX_STANDARD 17)
+		# Setting CMAKE_CXX_STANDARD is not sufficient with MSVC, see
+		#   https://gitlab.kitware.com/cmake/cmake/-/issues/18837
+		# The below test can be found in Qt6, lib/cmake/Qt6/QtFeature.cmake
+		if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND MSVC_VERSION GREATER_EQUAL 1913)
+			add_definitions("-Zc:__cplusplus")
+		endif()
+		list(APPEND QT_PACKAGELIST Qt6Core5Compat)
+	else()
+		list(APPEND QT_PACKAGELIST Qt5Multimedia)
+		if(WIN32)
+			list(APPEND QT_PACKAGELIST Qt5WinExtras)
+		endif()
 	endif()
 	foreach(_qt_package IN LISTS QT_PACKAGELIST)
 		find_package(${_qt_package} REQUIRED ${QT_FIND_PACKAGE_OPTIONS})
@@ -1271,6 +1240,12 @@ if(BUILD_wireshark)
 		list(APPEND QT_INCLUDE_DIRS /usr/local/opt/qt5/include)
 	endif()
 	set(QT_FOUND ON)
+	if(APPLE)
+		ws_find_package(Sparkle ENABLE_SPARKLE HAVE_SOFTWARE_UPDATE 1 EXACT)
+	endif()
+	if(Qt${qtver}Multimedia_FOUND)
+		set(QT_MULTIMEDIA_LIB 1)
+	endif()
 endif()
 
 # MaxMind DB address resolution
@@ -1395,10 +1370,11 @@ if(GNUTLS_FOUND AND NOT GNUTLS_VERSION VERSION_LESS "3.4.0")
 endif()
 
 if (QT_FOUND)
-	if (Qt5Widgets_VERSION VERSION_LESS 5.6)
+	if (Qt${qtver}Widgets_VERSION VERSION_LESS 5.6)
 		message(FATAL_ERROR "Qt 5.6 or later is required.")
 	endif()
-	if (Qt5Widgets_VERSION VERSION_GREATER 5.6
+	if (Qt${qtver}Widgets_VERSION VERSION_GREATER 5.6
+	    AND qtver MATCHES "5"
 	    AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang"))
 		# Qt 5.7 and later require C++ 11.
 		set(CMAKE_CXX_STANDARD 11)
@@ -1412,8 +1388,8 @@ if (QT_FOUND)
 	# CMake uses qmake to find Qt4. It relies on Qt's CMake modules
 	# to find Qt5. This means that we can't assume that the qmake
 	# in our PATH is the correct one. We can fetch qmake's location
-	# from Qt5::qmake, which is is defined in Qt5CoreConfigExtras.cmake.
-	get_target_property(QT_QMAKE_EXECUTABLE Qt5::qmake IMPORTED_LOCATION)
+	# from Qt5::qmake, which is defined in Qt5CoreConfigExtras.cmake.
+	get_target_property(QT_QMAKE_EXECUTABLE Qt${qtver}::qmake IMPORTED_LOCATION)
 	get_filename_component(_qt_bin_path "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
 	set(QT_BIN_PATH "${_qt_bin_path}" CACHE INTERNAL
 		"Path to qmake, macdeployqt, windeployqt, and other Qt utilities."
@@ -1438,7 +1414,7 @@ if (QT_FOUND)
 		# https://doc.qt.io/qt-5.15/supported-platforms.html
 		# https://doc-snapshots.qt.io/qt6-dev/supported-platforms.html
 		# CMake < 3.7 doesn't support VERSION_GREATER_EQUAL.
-		if(Qt5Widgets_VERSION VERSION_GREATER "5.999.999")
+		if(Qt${qtver}Widgets_VERSION VERSION_GREATER "5.999.999")
 			set(MIN_MACOS_VERSION 10.14)
 		elseif(Qt5Widgets_VERSION VERSION_GREATER "5.14.999")
 			set(MIN_MACOS_VERSION 10.13)
@@ -1452,7 +1428,7 @@ if (QT_FOUND)
 			set(MIN_MACOS_VERSION 10.9)
 		endif()
 		if(CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS MIN_MACOS_VERSION)
-			message(FATAL_ERROR "Qt version ${Qt5Widgets_VERSION} requires CMAKE_OSX_DEPLOYMENT_TARGET (${CMAKE_OSX_DEPLOYMENT_TARGET}) >= ${MIN_MACOS_VERSION}")
+			message(FATAL_ERROR "Qt version ${Qt${qtver}Widgets_VERSION} requires CMAKE_OSX_DEPLOYMENT_TARGET (${CMAKE_OSX_DEPLOYMENT_TARGET}) >= ${MIN_MACOS_VERSION}")
 		endif()
 	endif()
 
@@ -1719,17 +1695,18 @@ set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 set(CFG_OUT_FILES
 	doxygen.cfg
-	image/libwireshark.rc
-	image/wireshark.rc
-	image/dumpcap.rc
-	image/libwsutil.rc
-	image/wiretap.rc
-	image/wireshark.exe.manifest
 	packaging/macosx/Info.plist
-	packaging/macosx/dmgbuild-settings.py
 	packaging/macosx/osx-app.sh
 	packaging/macosx/osx-dmg.sh
+	packaging/macosx/wireshark-app.dmgbuild
+	packaging/macosx/wireshark-dsym.dmgbuild
 	packaging/source/git-export-release.sh
+	resources/dumpcap.rc
+	resources/libwireshark.rc
+	resources/libwiretap.rc
+	resources/libwsutil.rc
+	resources/wireshark.exe.manifest
+	resources/wireshark.rc
 	wireshark.pc
 )
 foreach( _cfg_file ${CFG_OUT_FILES} )
@@ -1775,7 +1752,7 @@ set_package_properties(LIBXML2 PROPERTIES
 set_package_properties(LIBSSH PROPERTIES
 	DESCRIPTION "Library for implementing SSH clients"
 	URL "https://www.libssh.org/"
-	PURPOSE "extcap remote SSH interfaces (sshdump, ciscodump)"
+	PURPOSE "extcap remote SSH interfaces (sshdump, ciscodump, wifidump)"
 )
 set_package_properties(LZ4 PROPERTIES
 	DESCRIPTION "LZ4 is a fast lossless compression algorithm"
@@ -1881,7 +1858,7 @@ if(WIN32)
 		ui/win32/file_dlg_win32.cpp
 	)
 	set(PLATFORM_UI_RC_FILES
-		image/file_dlg_win32.rc
+		resources/file_dlg_win32.rc
 	)
 elseif(APPLE)
 	set(PLATFORM_UI_SRC
@@ -1930,12 +1907,12 @@ set(TSHARK_TAP_SRC
 )
 
 set(INSTALL_DIRS
-	diameter
-	dtds
+	resources/protocols/diameter
+	resources/protocols/dtds
 	profiles
-	radius
-	tpncp
-	wimaxasncp
+	resources/protocols/radius
+	resources/protocols/tpncp
+	resources/protocols/wimaxasncp
 )
 
 set(INSTALL_FILES
@@ -1972,6 +1949,7 @@ if (ASCIIDOCTOR_FOUND)
 		${CMAKE_BINARY_DIR}/doc/rawshark.html
 		${CMAKE_BINARY_DIR}/doc/reordercap.html
 		${CMAKE_BINARY_DIR}/doc/sshdump.html
+		${CMAKE_BINARY_DIR}/doc/wifidump.html
 		${CMAKE_BINARY_DIR}/doc/text2pcap.html
 		${CMAKE_BINARY_DIR}/doc/tshark.html
 		${CMAKE_BINARY_DIR}/doc/wireshark.html
@@ -2196,7 +2174,7 @@ if(USE_REPOSITORY)
 		add_custom_command(TARGET pdb_zip_package POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E remove -f "${_pdb_zip}"
 			COMMAND ${ZIP_EXECUTABLE} a -tzip -mmt=on "${_pdb_zip_win}"
-				-bb2
+				-bb0 -bd
 				-r *.pdb *.lib
 			WORKING_DIRECTORY "${_dll_output_dir}"
 		)
@@ -2263,106 +2241,117 @@ if(LUA_FOUND AND ENABLE_LUA)
 endif(LUA_FOUND AND ENABLE_LUA)
 # doc/*.html handled elsewhere.
 
+set(_protocol_data_dir ${CMAKE_SOURCE_DIR}/resources/protocols)
 # Glob patterns relative to the source directory that should be copied to
 # ${DATAFILE_DIR} (including directory prefixes)
 # TODO shouldn't this use full (relative) paths instead of glob patterns?
 set(DATA_FILES_SRC
-	"tpncp/tpncp.dat"
-	"wimaxasncp/*.dtd"
-	"wimaxasncp/*.xml"
+	${_protocol_data_dir}/tpncp/tpncp.dat
+	${_protocol_data_dir}/wimaxasncp/*.dtd
+	${_protocol_data_dir}/wimaxasncp/*.xml
 )
 
 # Copy all paths from the source tree to the data directory. Directories are
 # automatically created if missing as the filename is given.
-file(GLOB _data_files RELATIVE "${CMAKE_SOURCE_DIR}" ${DATA_FILES_SRC})
+file(GLOB _data_files RELATIVE ${_protocol_data_dir} ${DATA_FILES_SRC})
 foreach(_data_file ${_data_files})
 	add_custom_command(OUTPUT "${DATAFILE_DIR}/${_data_file}"
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-			"${CMAKE_SOURCE_DIR}/${_data_file}"
-			"${DATAFILE_DIR}/${_data_file}"
+			${_protocol_data_dir}/${_data_file}
+			${DATAFILE_DIR}/${_data_file}
 		DEPENDS
-			"${CMAKE_SOURCE_DIR}/${_data_file}"
+			${_protocol_data_dir}/${_data_file}
 	)
-	list(APPEND copy_data_files_depends "${DATAFILE_DIR}/${_data_file}")
+	list(APPEND copy_data_files_depends ${DATAFILE_DIR}/${_data_file})
 endforeach()
 
-file(GLOB _dtds_src_files RELATIVE "${CMAKE_SOURCE_DIR}" "dtds/*.dtd")
+file(GLOB _dtds_src_files RELATIVE ${_protocol_data_dir} ${_protocol_data_dir}/dtds/*.dtd)
 
 set (_dtds_data_files)
+set (_dtds_dep_files)
 foreach(_data_file ${_dtds_src_files})
-	list(APPEND _dtds_data_files "${DATAFILE_DIR}/${_data_file}")
+	list(APPEND _dtds_data_files ${DATAFILE_DIR}/${_data_file})
+	list(APPEND _dtds_dep_files ${_protocol_data_dir})
 endforeach()
 
 add_custom_command(
 	OUTPUT ${_dtds_data_files}
-	COMMAND ${CMAKE_COMMAND} -E make_directory "${DATAFILE_DIR}/dtds"
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${DATAFILE_DIR}/dtds
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different
 		${_dtds_src_files}
-		"${DATAFILE_DIR}/dtds"
+		${DATAFILE_DIR}/dtds
 	VERBATIM
-	DEPENDS ${_dtds_src_files}
-	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+	DEPENDS ${_dtds_dep_files}
+	WORKING_DIRECTORY ${_protocol_data_dir}
 )
 
-file(GLOB _diameter_src_files RELATIVE "${CMAKE_SOURCE_DIR}"
-	diameter/*.dtd
-	diameter/*.xml
+file(GLOB _diameter_src_files RELATIVE ${_protocol_data_dir}
+	${_protocol_data_dir}/diameter/*.dtd
+	${_protocol_data_dir}/diameter/*.xml
 )
 
 set (_diameter_data_files)
+set (_diameter_dep_files)
 foreach(_data_file ${_diameter_src_files})
-	list(APPEND _diameter_data_files "${DATAFILE_DIR}/${_data_file}")
+	list(APPEND _diameter_data_files ${DATAFILE_DIR}/${_data_file})
+	list(APPEND _diameter_dep_files ${_protocol_data_dir}/${_data_file})
 endforeach()
 
 add_custom_command(
 	OUTPUT ${_diameter_data_files}
-	COMMAND ${CMAKE_COMMAND} -E make_directory "${DATAFILE_DIR}/diameter"
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${DATAFILE_DIR}/diameter
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different
 		${_diameter_src_files}
-		"${DATAFILE_DIR}/diameter"
+		${DATAFILE_DIR}/diameter
 	VERBATIM
-	DEPENDS ${_diameter_src_files}
-	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+	DEPENDS ${_diameter_dep_files}
+	WORKING_DIRECTORY ${_protocol_data_dir}
 )
 
-file(GLOB _radius_src_files RELATIVE "${CMAKE_SOURCE_DIR}"
-	radius/README.radius_dictionary
-	radius/custom.includes
-	radius/dictionary
-	radius/dictionary.*
+file(GLOB _radius_src_files RELATIVE ${_protocol_data_dir}
+	${_protocol_data_dir}/radius/README.radius_dictionary
+	${_protocol_data_dir}/radius/custom.includes
+	${_protocol_data_dir}/radius/dictionary
+	${_protocol_data_dir}/radius/dictionary.*
 )
 
 set (_radius_data_files)
+set (_radius_dep_files)
 foreach(_data_file ${_radius_src_files})
-	list(APPEND _radius_data_files "${DATAFILE_DIR}/${_data_file}")
+	list(APPEND _radius_data_files ${DATAFILE_DIR}/${_data_file})
+	list(APPEND _radius_dep_files ${_protocol_data_dir}/${_data_file})
 endforeach()
 
 add_custom_command(
 	OUTPUT ${_radius_data_files}
-	COMMAND ${CMAKE_COMMAND} -E make_directory "${DATAFILE_DIR}/radius"
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${DATAFILE_DIR}/radius
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different
 		${_radius_src_files}
-		"${DATAFILE_DIR}/radius"
+		${DATAFILE_DIR}/radius
 	VERBATIM
-	DEPENDS ${_radius_src_files}
-	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+	DEPENDS ${_radius_dep_files}
+	WORKING_DIRECTORY ${_protocol_data_dir}
 )
 
-file(GLOB _protobuf_src_files RELATIVE "${CMAKE_SOURCE_DIR}" protobuf/*.proto)
+file(GLOB _protobuf_src_files RELATIVE ${_protocol_data_dir}
+	${_protocol_data_dir}/protobuf/*.proto
+)
 set (_protobuf_data_files)
+set (_protobuf_dep_files)
 foreach(_data_file ${_protobuf_src_files})
-	list(APPEND _protobuf_data_files "${DATAFILE_DIR}/${_data_file}")
+	list(APPEND _protobuf_data_files ${DATAFILE_DIR}/${_data_file})
+	list(APPEND _protobuf_data_files ${_protocol_data_dir}/${_data_file})
 endforeach()
 
 add_custom_command(
 	OUTPUT ${_protobuf_data_files}
-	COMMAND ${CMAKE_COMMAND} -E make_directory "${DATAFILE_DIR}/protobuf"
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${DATAFILE_DIR}/protobuf
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different
 		${_protobuf_src_files}
-		"${DATAFILE_DIR}/protobuf"
+		${DATAFILE_DIR}/protobuf
 	VERBATIM
-	DEPENDS ${_protobuf_src_files}
-	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+	DEPENDS ${_protobuf_dep_files}
+	WORKING_DIRECTORY ${_protocol_data_dir}
 )
 
 file(GLOB _profiles_src_files RELATIVE "${CMAKE_SOURCE_DIR}" profiles/*/*)
@@ -2582,7 +2571,7 @@ if(BUILD_wireshark AND QT_FOUND)
 			COMMAND set "PATH=${QT_BIN_PATH};%PATH%"
 			COMMAND "${QT_WINDEPLOYQT_EXECUTABLE}"
 				--no-compiler-runtime
-				--verbose 10
+				--verbose 0
 				$<$<BOOL:${MSVC}>:--pdb>
 				"$<TARGET_FILE:wireshark>"
 		)
@@ -2761,6 +2750,7 @@ if(BUILD_dftest)
 	set(dftest_FILES
 		dftest.c
 	)
+	set_executable_resources(dftest "Dftest")
 	add_executable(dftest ${dftest_FILES})
 	set_extra_executable_properties(dftest "Tests")
 	target_link_libraries(dftest ${dftest_LIBS})
@@ -2780,6 +2770,8 @@ if(BUILD_randpkt)
 		$<TARGET_OBJECTS:cli_main>
 		randpkt.c
 	)
+	set_executable_resources(randpkt "Randpkt"
+		COPYRIGHT_INFO "Copyright (C) 1999 by Gilbert Ramirez <gram@alumni.rice.edu>")
 	add_executable(randpkt ${randpkt_FILES})
 	set_extra_executable_properties(randpkt "Executables")
 	target_link_libraries(randpkt ${randpkt_LIBS})
@@ -2793,8 +2785,10 @@ endif()
 
 if(BUILD_text2pcap)
 	set(text2pcap_LIBS
-		writecap
+		wiretap
 		wsutil
+		ui
+		epan
 		version_info
 		${M_LIBRARIES}
 		${ZLIB_LIBRARIES}
@@ -2802,9 +2796,6 @@ if(BUILD_text2pcap)
 	set(text2pcap_FILES
 		$<TARGET_OBJECTS:cli_main>
 		text2pcap.c
-	)
-	add_lex_files(text2pcap_LEX_FILES text2pcap_FILES
-		text2pcap-scanner.l
 	)
 	set_executable_resources(text2pcap "Text2pcap"
 		COPYRIGHT_INFO "2001 Ashok Narayanan <ashokn@cisco.com>")
@@ -3031,6 +3022,7 @@ if (MAXMINDDB_FOUND)
 	set(mmdbresolve_FILES
 		mmdbresolve.c
 	)
+	set_executable_resources(mmdbresolve "Mmdbresolve")
 	add_executable(mmdbresolve ${mmdbresolve_FILES})
 	set_extra_executable_properties(mmdbresolve "Executables")
 	target_link_libraries(mmdbresolve ${mmdbresolve_LIBS})
@@ -3189,8 +3181,22 @@ if(ENABLE_APPLICATION_BUNDLE)
 	DEPENDS
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Read_me_first.adoc
 	)
-	add_custom_target(read_me_first_html DEPENDS ${_read_me_first} )
-	add_dependencies(dmg_package_prep read_me_first_html)
+
+	set(_dsym_installation "packaging/macosx/Debugging symbols installation.html")
+	ADD_CUSTOM_COMMAND(
+	OUTPUT
+		${_dsym_installation}
+	COMMAND ${ASCIIDOCTOR_EXECUTABLE}
+		--backend html
+		--out-file ${_dsym_installation}
+		--attribute include-dir=${CMAKE_SOURCE_DIR}/docbook
+		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Debugging_symbols_installation.adoc
+	DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Debugging_symbols_installation.adoc
+	)
+
+	add_custom_target(dmg_package_readmes DEPENDS ${_read_me_first} ${_dsym_installation} )
+	add_dependencies(dmg_package_prep dmg_package_readmes)
 
 	ADD_CUSTOM_TARGET( dmg_package
 		COMMAND bash -x ${CMAKE_BINARY_DIR}/packaging/macosx/osx-dmg.sh
@@ -3449,6 +3455,7 @@ set(SHARK_PUBLIC_HEADERS
 	include/ws_compiler_tests.h
 	include/ws_diag_control.h
 	include/ws_log_defs.h
+	include/ws_posix_compat.h
 	include/ws_symbol_export.h
 	include/wireshark.h
 	${CMAKE_BINARY_DIR}/ws_version.h
@@ -3460,26 +3467,26 @@ install(FILES ${SHARK_PUBLIC_HEADERS}
 
 # Install icons and other desktop files for Freedesktop.org-compliant desktops.
 if((BUILD_wireshark AND QT_FOUND) AND NOT (WIN32 OR APPLE))
-	install(FILES org.wireshark.Wireshark-mime.xml
+	install(FILES resources/freedesktop/org.wireshark.Wireshark-mime.xml
 		DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/mime/packages"
 		RENAME org.wireshark.Wireshark.xml
 	)
-	install(FILES org.wireshark.Wireshark.metainfo.xml
+	install(FILES resources/freedesktop/org.wireshark.Wireshark.metainfo.xml
 		DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/metainfo"
 	)
 	if(BUILD_wireshark AND QT_FOUND)
-		install(FILES org.wireshark.Wireshark.desktop
+		install(FILES resources/freedesktop/org.wireshark.Wireshark.desktop
 			DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications")
 	endif()
 	foreach(size 16 24 32 48 64 128 256)
-		install(FILES image/wsicon${size}.png
+		install(FILES resources/icons/wsicon${size}.png
 			DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${size}x${size}/apps"
 			RENAME org.wireshark.Wireshark.png)
-		install(FILES image/WiresharkDoc-${size}.png
+		install(FILES resources/icons/WiresharkDoc-${size}.png
 			DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${size}x${size}/mimetypes"
 			RENAME org.wireshark.Wireshark-mimetype.png)
 	endforeach()
-	install(FILES image/wsicon.svg
+	install(FILES resources/icons/wsicon.svg
 		DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps"
 		RENAME org.wireshark.Wireshark.svg)
 endif()
@@ -3741,7 +3748,7 @@ if(SHELLCHECK_EXECUTABLE)
 	# added support for that.
 	add_custom_command(TARGET shellcheck POST_BUILD
 		COMMAND shellcheck --external-sources
-			image/stock_icons/svg-to-png.sh
+			resources/stock_icons/svg-to-png.sh
 			packaging/appimage/AppRun
 			"packaging/macosx/ChmodBPF/root/Library/Application Support/Wireshark/ChmodBPF/ChmodBPF"
 			packaging/macosx/osx-app.sh.in

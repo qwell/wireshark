@@ -32,7 +32,7 @@ Examples:
 
 
 ALLOWED_LICENSES = [
-    'BSD',
+    'BSD (1 clause)',
     'BSD (2 clause)',
     'BSD (2 clause) GPL (v2 or later)',
     'BSD (3 clause)',
@@ -61,13 +61,13 @@ PATH_SPECIFIC_ALLOWED_LICENSES = {
     'wsutil/strnatcmp.h': [
         'Zlib',
     ],
-    'dtds': [
+    'resources/protocols/dtds': [
         'UNKNOWN',
     ],
-    'diameter/dictionary.dtd': [
+    'resources/protocols/diameter/dictionary.dtd': [
         'UNKNOWN',
     ],
-    'wimaxasncp/dictionary.dtd': [
+    'resources/protocols/wimaxasncp/dictionary.dtd': [
         'UNKNOWN',
     ],
     'doc/': [

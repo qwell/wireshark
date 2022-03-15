@@ -1,5 +1,4 @@
-/*
- * exported_pdu.h
+/** @file
  * Routines for exported_pdu dissection
  * Copyright 2013, Anders Broman <anders-broman@ericsson.com>
  *
@@ -39,7 +38,12 @@ extern "C" {
 /* To add dynamically an export name, call the following function
    It returns the registered tap */
 WS_DLL_PUBLIC gint register_export_pdu_tap(const char *name);
+/* Same as above, but for export taps that use an encapsulation other
+ * than WTAP_ENCAP_WIRESHARK_UPPER_PDU */
+WS_DLL_PUBLIC gint register_export_pdu_tap_with_encap(const char *name, gint encap);
 WS_DLL_PUBLIC GSList *get_export_pdu_tap_list(void);
+
+WS_DLL_PUBLIC gint export_pdu_tap_get_encap(const char* name);
 
 /** Compute the size (in bytes) of a pdu item
 *

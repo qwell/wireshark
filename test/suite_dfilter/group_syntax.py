@@ -19,9 +19,10 @@ class case_syntax(unittest.TestCase):
         dfilter = "ip.proto == 6"
         checkDFilterCount(dfilter, 1)
 
-    def test_commute_2(self, checkDFilterCount):
+    def test_commute_2(self, checkDFilterFail):
         dfilter = "6 == ip.proto"
-        checkDFilterCount(dfilter, 1)
+        error = "Left side of \"==\" expression must be a field or function"
+        checkDFilterFail(dfilter, error)
 
     def test_func_1(self, checkDFilterCount):
         dfilter = "len(frame) == 207"
@@ -37,7 +38,7 @@ class case_syntax(unittest.TestCase):
 
     def test_matches_2(self, checkDFilterFail):
         dfilter = 'http.request.method matches HEAD'
-        checkDFilterFail(dfilter, 'Expected a double quoted string')
+        checkDFilterFail(dfilter, 'requires a double quoted string')
 
     def test_matches_3(self, checkDFilterFail):
         dfilter = 'http.request.method matches "^HEAD" matches "^POST"'
@@ -46,10 +47,6 @@ class case_syntax(unittest.TestCase):
     def test_matches_4(self, checkDFilterCount):
         dfilter = r'http.host matches r"update\.microsoft\.c.."'
         checkDFilterCount(dfilter, 1)
-
-    def test_matches_5(self, checkDFilterFail):
-        dfilter = '"a" matches "b"'
-        checkDFilterFail(dfilter, "not a valid operand for matches")
 
     def test_equal_1(self, checkDFilterCount):
         dfilter = 'ip.addr == 10.0.0.5'
@@ -103,3 +100,43 @@ class case_syntax(unittest.TestCase):
     def test_charconst_invalid(self, checkDFilterFail):
         dfilter = r"ip.proto == '\Z'"
         checkDFilterFail(dfilter, "isn't a valid character constant")
+
+    def test_bool_1(self, checkDFilterCount):
+        dfilter = "tcp.flags.push == 1"
+        checkDFilterCount(dfilter, 1)
+
+    def test_bool_2(self, checkDFilterCount):
+        dfilter = "tcp.flags.push == true"
+        checkDFilterCount(dfilter, 1)
+
+@fixtures.uses_fixtures
+class case_equality(unittest.TestCase):
+    trace_file = "sip.pcapng"
+
+    def test_all_eq_1(self, checkDFilterCount):
+        dfilter = "udp.port === 5060"
+        checkDFilterCount(dfilter, 2)
+
+    def test_any_ne_1(self, checkDFilterCount):
+        dfilter = "udp.port !== 5060"
+        checkDFilterCount(dfilter, 4)
+
+    def test_any_eq_1(self, checkDFilterCount):
+        dfilter = "udp.port == 5060"
+        checkDFilterCount(dfilter, 5)
+
+    def test_all_ne_1(self, checkDFilterCount):
+        dfilter = "udp.port != 5060"
+        checkDFilterCount(dfilter, 1)
+
+    def test_root_1(self, checkDFilterCount):
+        dfilter = "udp.srcport == .udp.dstport"
+        checkDFilterCount(dfilter, 2)
+
+    def test_literal_1(self, checkDFilterCount):
+        dfilter = "udp.port == :5070"
+        checkDFilterCount(dfilter, 3)
+
+    def test_literal_2(self, checkDFilterCount):
+        dfilter = "udp contains <ce:13>"
+        checkDFilterCount(dfilter, 1)

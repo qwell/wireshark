@@ -264,13 +264,22 @@ fvalue_free(fvalue_t *fv)
 }
 
 fvalue_t*
-fvalue_from_unparsed(ftenum_t ftype, const char *s, gboolean allow_partial_value, gchar **err_msg)
+fvalue_from_literal(ftenum_t ftype, const char *s, gboolean allow_partial_value, gchar **err_msg)
 {
 	fvalue_t	*fv;
+	gboolean ok = FALSE;
 
 	fv = fvalue_new(ftype);
-	if (fv->ftype->val_from_unparsed) {
-		if (fv->ftype->val_from_unparsed(fv, s, allow_partial_value, err_msg)) {
+	if (fv->ftype->val_from_literal) {
+		if (*s == ':') {
+			ok = fv->ftype->val_from_literal(fv, s + 1, allow_partial_value, err_msg);
+			/* If not ok maybe leading colon is not special syntax but part of the value (e.g: IPv6),
+			 * try again in that case. */
+		}
+		if (!ok) {
+			ok = fv->ftype->val_from_literal(fv, s, allow_partial_value, err_msg);
+		}
+		if (ok) {
 			/* Success */
 			if (err_msg != NULL)
 				*err_msg = NULL;
@@ -279,7 +288,7 @@ fvalue_from_unparsed(ftenum_t ftype, const char *s, gboolean allow_partial_value
 	}
 	else {
 		if (err_msg != NULL) {
-			*err_msg = g_strdup_printf("\"%s\" cannot be converted to %s.",
+			*err_msg = ws_strdup_printf("\"%s\" cannot be converted to %s.",
 					s, ftype_pretty_name(ftype));
 		}
 	}
@@ -303,8 +312,38 @@ fvalue_from_string(ftenum_t ftype, const char *s, gchar **err_msg)
 	}
 	else {
 		if (err_msg != NULL) {
-			*err_msg = g_strdup_printf("\"%s\" cannot be converted to %s.",
+			*err_msg = ws_strdup_printf("\"%s\" cannot be converted to %s.",
 					s, ftype_pretty_name(ftype));
+		}
+	}
+	fvalue_free(fv);
+	return NULL;
+}
+
+fvalue_t*
+fvalue_from_charconst(ftenum_t ftype, unsigned long num, gchar **err_msg)
+{
+	fvalue_t	*fv;
+
+	fv = fvalue_new(ftype);
+	if (fv->ftype->val_from_charconst) {
+		if (fv->ftype->val_from_charconst(fv, num, err_msg)) {
+			/* Success */
+			if (err_msg != NULL)
+				*err_msg = NULL;
+			return fv;
+		}
+	}
+	else {
+		if (err_msg != NULL) {
+			if (num <= 0x7f && g_ascii_isprint(num)) {
+				*err_msg = ws_strdup_printf("Character constant '%c' (0x%lx) cannot be converted to %s.",
+						(int)num, num, ftype_pretty_name(ftype));
+			}
+			else {
+				*err_msg = ws_strdup_printf("Character constant 0x%lx cannot be converted to %s.",
+						num, ftype_pretty_name(ftype));
+			}
 		}
 	}
 	fvalue_free(fv);

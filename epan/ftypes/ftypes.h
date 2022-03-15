@@ -1,4 +1,4 @@
-/* ftypes.h
+/** @file
  * Definitions for field types
  *
  * Wireshark - Network traffic analyzer
@@ -247,10 +247,13 @@ fvalue_free(fvalue_t *fv);
 
 WS_DLL_PUBLIC
 fvalue_t*
-fvalue_from_unparsed(ftenum_t ftype, const char *s, gboolean allow_partial_value, gchar **err_msg);
+fvalue_from_literal(ftenum_t ftype, const char *s, gboolean allow_partial_value, gchar **err_msg);
 
 fvalue_t*
 fvalue_from_string(ftenum_t ftype, const char *s, gchar **err_msg);
+
+fvalue_t*
+fvalue_from_charconst(ftenum_t ftype, unsigned long number, gchar **err_msg);
 
 /* Creates the string representation of the field value.
  * Memory for the buffer is allocated based on wmem allocator
@@ -262,6 +265,9 @@ fvalue_from_string(ftenum_t ftype, const char *s, gchar **err_msg);
  * Returns NULL if the string cannot be represented in the given rtype.*/
 WS_DLL_PUBLIC char *
 fvalue_to_string_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int field_display);
+
+#define fvalue_to_debug_repr(scope, fv) \
+	fvalue_to_string_repr(NULL, fv, FTREPR_DFILTER, 0)
 
 WS_DLL_PUBLIC ftenum_t
 fvalue_type_ftenum(fvalue_t *fv);

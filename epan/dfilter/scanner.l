@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <errno.h>
 
+#include <wsutil/str_util.h>
+
 #include "dfilter-int.h"
 #include "syntax-tree.h"
 #include "grammar.h"
@@ -80,6 +82,7 @@ df_lval_t *df_lval;
 static int set_lval_str(int token, const char *token_value);
 #define simple(token) set_lval_str(token, yytext)
 static gboolean append_escaped_char(dfwork_t *dfw, GString *str, char c);
+static gboolean parse_charconst(dfwork_t *dfw, const char *s, unsigned long *valuep);
 
 /*
  * Sleazy hack to suppress compiler warnings in yy_fatal_error().
@@ -94,6 +97,8 @@ static gboolean append_escaped_char(dfwork_t *dfw, GString *str, char c);
 #define df_free(ptr, yyscanner)			free((char *)ptr)
 
 %}
+
+WORD_CHAR			[][:alnum:]_:/+-]
 
 %x RANGE
 %x DQUOTE
@@ -112,9 +117,17 @@ static gboolean append_escaped_char(dfwork_t *dfw, GString *str, char c);
 
 "=="		return simple(TOKEN_TEST_ANY_EQ);
 "eq"		return simple(TOKEN_TEST_ANY_EQ);
+"any_eq"	return simple(TOKEN_TEST_ANY_EQ);
 "!="		return simple(TOKEN_TEST_ALL_NE);
 "ne"		return simple(TOKEN_TEST_ALL_NE);
-"~="		return simple(TOKEN_TEST_ANY_NE);
+"all_ne"	return simple(TOKEN_TEST_ALL_NE);
+"==="		return simple(TOKEN_TEST_ALL_EQ);
+"all_eq"	return simple(TOKEN_TEST_ALL_EQ);
+"!=="		return simple(TOKEN_TEST_ANY_NE);
+"~="		{
+	add_deprecated_token(yyextra->dfw, "The operator \"~=\" is deprecated, use \"!==\" instead.");
+	return simple(TOKEN_TEST_ANY_NE);
+}
 "any_ne"	return simple(TOKEN_TEST_ANY_NE);
 ">"		return simple(TOKEN_TEST_GT);
 "gt"		return simple(TOKEN_TEST_GT);
@@ -256,6 +269,8 @@ static gboolean append_escaped_char(dfwork_t *dfw, GString *str, char c);
 		g_string_append(yyextra->quoted_string, yytext);
 	}
 	else if (!append_escaped_char(yyextra->dfw, yyextra->quoted_string, yytext[1])) {
+		g_string_free(yyextra->quoted_string, TRUE);
+		yyextra->quoted_string = NULL;
 		return SCAN_FAILED;
 	}
 }
@@ -286,6 +301,10 @@ static gboolean append_escaped_char(dfwork_t *dfw, GString *str, char c);
 	g_string_append_c(yyextra->quoted_string, '\'');
 	df_lval->value = g_string_free(yyextra->quoted_string, FALSE);
 	yyextra->quoted_string = NULL;
+
+	if (!parse_charconst(yyextra->dfw, df_lval->value, &df_lval->number)) {
+		return SCAN_FAILED;
+	}
 	return TOKEN_CHARCONST;
 }
 
@@ -301,35 +320,33 @@ static gboolean append_escaped_char(dfwork_t *dfw, GString *str, char c);
 
 
 	/* None of the patterns below can match ".." anywhere in the token string. */
- 
-[-+[:alnum:]_:./]+ {
-	char *s, *value;
 
-	/* Hack (but lesser) to make sure that ".." is interpreted as a token on its own. */
-	if ((s = strstr(yytext, "..")) != NULL) {
-		/* If it starts with ".." it is its own token. */
-		if (yytext[0] == '.' && yytext[1] == '.') {
-			yyless(2);
-			df_lval->value = g_strdup("..");
-			return TOKEN_DOTDOT;
-		}
+:{WORD_CHAR}+(\.{WORD_CHAR}+)*		{
+	/* Literal. */
+	return set_lval_str(TOKEN_LITERAL, yytext);
+}
 
-		/* Match only the prefix before "..". */
-		*s = '\0';
-		value = g_strdup(yytext);
-		*s = '.'; /* Restore */
-		yyless(strlen(value));
-		df_lval->value = value;
-		return TOKEN_UNPARSED;
-	}
+"<"[^>=]+">"			{
+	/* Literal. */
+	return set_lval_str(TOKEN_LITERAL, yytext);
+}
 
-	/* It is a variable or a literal value (CIDR, bytes, number, ...). */
+\.{WORD_CHAR}+(\.{WORD_CHAR}+)*		{
+	/* Identifier */
+	return set_lval_str(TOKEN_IDENTIFIER, yytext);
+}
+
+{WORD_CHAR}+(\.{WORD_CHAR}+)*		{
+	/* Unparsed word token. */
 	return set_lval_str(TOKEN_UNPARSED, yytext);
 }
 
 . {
- 	/* Default */
-	dfilter_fail(yyextra->dfw, "\"%s\" was unexpected in this context.", yytext);
+	/* Default */
+	if (isprint_string(yytext))
+		dfilter_fail(yyextra->dfw, "\"%s\" was unexpected in this context.", yytext);
+	else
+		dfilter_fail(yyextra->dfw, "Non-printable ASCII characters may only appear inside double-quotes.");
 	return SCAN_FAILED;
 }
 
@@ -383,5 +400,150 @@ append_escaped_char(dfwork_t *dfw, GString *str, char c)
 	}
 
 	g_string_append_c(str, c);
+	return TRUE;
+}
+
+static gboolean
+parse_charconst(dfwork_t *dfw, const char *s, unsigned long *valuep)
+{
+	const char *cp;
+	unsigned long value;
+
+	cp = s + 1;	/* skip the leading ' */
+	if (*cp == '\'') {
+		dfilter_fail(dfw, "Empty character constant.");
+		return FALSE;
+	}
+
+	if (*cp == '\\') {
+		/*
+		 * C escape sequence.
+		 * An escape sequence is an octal number \NNN,
+		 * an hex number \xNN, or one of \' \" \\ \a \b \f \n \r \t \v
+		 * that stands for the byte value of the equivalent
+		 * C-escape in ASCII encoding.
+		 */
+		cp++;
+		switch (*cp) {
+
+		case '\0':
+			dfilter_fail(dfw, "%s isn't a valid character constant.", s);
+			return FALSE;
+
+		case 'a':
+			value = '\a';
+			break;
+
+		case 'b':
+			value = '\b';
+			break;
+
+		case 'f':
+			value = '\f';
+			break;
+
+		case 'n':
+			value = '\n';
+			break;
+
+		case 'r':
+			value = '\r';
+			break;
+
+		case 't':
+			value = '\t';
+			break;
+
+		case 'v':
+			value = '\v';
+			break;
+
+		case '\'':
+			value = '\'';
+			break;
+
+		case '\\':
+			value = '\\';
+			break;
+
+		case '"':
+			value = '"';
+			break;
+
+		case 'x':
+			cp++;
+			if (*cp >= '0' && *cp <= '9')
+				value = *cp - '0';
+			else if (*cp >= 'A' && *cp <= 'F')
+				value = 10 + (*cp - 'A');
+			else if (*cp >= 'a' && *cp <= 'f')
+				value = 10 + (*cp - 'a');
+			else {
+				dfilter_fail(dfw, "%s isn't a valid character constant.", s);
+				return FALSE;
+			}
+			cp++;
+			if (*cp != '\'') {
+				value <<= 4;
+				if (*cp >= '0' && *cp <= '9')
+					value |= *cp - '0';
+				else if (*cp >= 'A' && *cp <= 'F')
+					value |= 10 + (*cp - 'A');
+				else if (*cp >= 'a' && *cp <= 'f')
+					value |= 10 + (*cp - 'a');
+				else {
+					dfilter_fail(dfw, "%s isn't a valid character constant.", s);
+					return FALSE;
+				}
+			}
+			break;
+
+		default:
+			/* Octal */
+			if (*cp >= '0' && *cp <= '7')
+				value = *cp - '0';
+			else {
+				dfilter_fail(dfw, "%s isn't a valid character constant.", s);
+				return FALSE;
+			}
+			if (*(cp + 1) != '\'') {
+				cp++;
+				value <<= 3;
+				if (*cp >= '0' && *cp <= '7')
+					value |= *cp - '0';
+				else {
+					dfilter_fail(dfw, "%s isn't a valid character constant.", s);
+					return FALSE;
+				}
+				if (*(cp + 1) != '\'') {
+					cp++;
+					value <<= 3;
+					if (*cp >= '0' && *cp <= '7')
+						value |= *cp - '0';
+					else {
+						dfilter_fail(dfw, "%s isn't a valid character constant.", s);
+						return FALSE;
+					}
+				}
+			}
+			if (value > 0xFF) {
+				dfilter_fail(dfw, "%s is too large to be a valid character constant.", s);
+				return FALSE;
+			}
+		}
+	} else {
+		value = *cp;
+		if (!g_ascii_isprint(value)) {
+			dfilter_fail(dfw, "Non-printable value '0x%02lx' in character constant.", value);
+			return FALSE;
+		}
+	}
+	cp++;
+	if ((*cp != '\'') || (*(cp + 1) != '\0')){
+		dfilter_fail(dfw, "%s is too long to be a valid character constant.", s);
+		return FALSE;
+	}
+
+	*valuep = value;
 	return TRUE;
 }

@@ -37,6 +37,8 @@ typedef struct packetlogger_header {
 #define PKT_HCI_EVENT       0x01
 #define PKT_SENT_ACL_DATA   0x02
 #define PKT_RECV_ACL_DATA   0x03
+#define PKT_SENT_SCO_DATA   0x08
+#define PKT_RECV_SCO_DATA   0x09
 #define PKT_LMP_SEND        0x0A
 #define PKT_LMP_RECV        0x0B
 #define PKT_SYSLOG          0xF7
@@ -305,6 +307,8 @@ packetlogger_check_record(wtap *wth, packetlogger_header_t *pl_hdr, int *err,
 		case PKT_HCI_EVENT:
 		case PKT_SENT_ACL_DATA:
 		case PKT_RECV_ACL_DATA:
+		case PKT_SENT_SCO_DATA:
+		case PKT_RECV_SCO_DATA:
 		case PKT_LMP_SEND:
 		case PKT_LMP_RECV:
 		case PKT_SYSLOG:
@@ -351,7 +355,7 @@ packetlogger_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf,
 
 	if (pl_hdr.len < 8) {
 		*err = WTAP_ERR_BAD_FILE;
-		*err_info = g_strdup_printf("packetlogger: record length %u is too small", pl_hdr.len);
+		*err_info = ws_strdup_printf("packetlogger: record length %u is too small", pl_hdr.len);
 		return FALSE;
 	}
 	if (pl_hdr.len - 8 > WTAP_MAX_PACKET_SIZE_STANDARD) {
@@ -360,7 +364,7 @@ packetlogger_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf,
 		 * to allocate space for an immensely-large packet.
 		 */
 		*err = WTAP_ERR_BAD_FILE;
-		*err_info = g_strdup_printf("packetlogger: File has %u-byte packet, bigger than maximum of %u",
+		*err_info = ws_strdup_printf("packetlogger: File has %u-byte packet, bigger than maximum of %u",
 		    pl_hdr.len - 8, WTAP_MAX_PACKET_SIZE_STANDARD);
 		return FALSE;
 	}

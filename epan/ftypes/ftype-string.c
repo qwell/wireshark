@@ -47,10 +47,7 @@ string_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int 
 		return wmem_strdup(scope, fv->value.string);
 	}
 	if (rtype == FTREPR_DFILTER) {
-		int len = escape_string_len(fv->value.string);
-		char *buf = wmem_alloc(scope, len + 1);
-		escape_string(buf, fv->value.string);
-		return buf;
+		return ws_escape_string(scope, fv->value.string, TRUE);
 	}
 	ws_assert_not_reached();
 }
@@ -73,13 +70,37 @@ val_from_string(fvalue_t *fv, const char *s, gchar **err_msg _U_)
 }
 
 static gboolean
-val_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
+val_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
 {
 	/* Just turn it into a string */
 	/* XXX Should probably be a syntax error instead. It's more user-friendly to ask the
-	 * user to be explicit about the meaning of unparsed than them trying to figure out
+	 * user to be explicit about the meaning of an unquoted literal than them trying to figure out
 	 * why a valid filter expression is giving wrong results. */
 	return val_from_string(fv, s, err_msg);
+}
+
+static gboolean
+val_from_charconst(fvalue_t *fv, unsigned long num, gchar **err_msg)
+{
+	/* XXX Should be a syntax error if literal is also a syntax error. */
+
+	/* Free up the old value, if we have one */
+	string_fvalue_free(fv);
+	fv->value.string = NULL;
+
+	if (num > UINT8_MAX) {
+		if (err_msg) {
+			*err_msg = ws_strdup_printf("%lu is too large for a byte value", num);
+		}
+		return FALSE;
+	}
+
+	char c = (char)num;
+	fv->value.string = g_malloc(2);
+	fv->value.string[0] = c;
+	fv->value.string[1] = '\0';
+
+	return TRUE;
 }
 
 static guint
@@ -131,7 +152,7 @@ cmp_matches(const fvalue_t *fv, const ws_regex_t *regex)
 	if (! regex) {
 		return FALSE;
 	}
-	return ws_regex_matches(regex, str, -1);
+	return ws_regex_matches(regex, str);
 }
 
 void
@@ -145,8 +166,9 @@ ftype_register_string(void)
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
 		string_fvalue_free,		/* free_value */
-		val_from_unparsed,		/* val_from_unparsed */
+		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
+		val_from_charconst,		/* val_from_charconst */
 		string_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_string = string_fvalue_set_string },	/* union set_value */
@@ -167,8 +189,9 @@ ftype_register_string(void)
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
 		string_fvalue_free,		/* free_value */
-		val_from_unparsed,		/* val_from_unparsed */
+		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
+		val_from_charconst,		/* val_from_charconst */
 		string_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_string = string_fvalue_set_string },	/* union set_value */
@@ -189,8 +212,9 @@ ftype_register_string(void)
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
 		string_fvalue_free,		/* free_value */
-		val_from_unparsed,		/* val_from_unparsed */
+		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
+		val_from_charconst,		/* val_from_charconst */
 		string_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_string = string_fvalue_set_string },	/* union set_value */
@@ -211,8 +235,9 @@ ftype_register_string(void)
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
 		string_fvalue_free,		/* free_value */
-		val_from_unparsed,		/* val_from_unparsed */
+		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
+		val_from_charconst,		/* val_from_charconst */
 		string_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_string = string_fvalue_set_string },	/* union set_value */
@@ -233,8 +258,9 @@ ftype_register_string(void)
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
 		string_fvalue_free,		/* free_value */
-		val_from_unparsed,		/* val_from_unparsed */
+		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
+		val_from_charconst,		/* val_from_charconst */
 		string_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_string = string_fvalue_set_string },	/* union set_value */

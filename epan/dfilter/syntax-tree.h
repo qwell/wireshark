@@ -22,6 +22,7 @@
 typedef enum {
 	STTYPE_UNINITIALIZED,
 	STTYPE_TEST,
+	STTYPE_LITERAL,
 	STTYPE_UNPARSED,
 	STTYPE_STRING,
 	STTYPE_CHARCONST,
@@ -40,6 +41,7 @@ typedef enum {
 	TEST_OP_NOT,
 	TEST_OP_AND,
 	TEST_OP_OR,
+	TEST_OP_ALL_EQ,
 	TEST_OP_ANY_EQ,
 	TEST_OP_ALL_NE,
 	TEST_OP_ANY_NE,
@@ -77,6 +79,7 @@ typedef struct {
 	sttype_t	*type;
 	uint16_t	flags;
 	gpointer	data;
+	char 		*repr_token;
 	char 		*repr_display;
 	char 		*repr_debug;
 } stnode_t;
@@ -100,19 +103,22 @@ void
 sttype_register(sttype_t *type);
 
 stnode_t*
-stnode_new(sttype_id_t type_id, gpointer data);
+stnode_new(sttype_id_t type_id, gpointer data, char *token);
 
 stnode_t *
-stnode_new_test(test_op_t op, stnode_t *val1, stnode_t *val2);
+stnode_new_test(test_op_t op, char *token);
 
 stnode_t *
-stnode_new_string(const char *str);
+stnode_new_string(const char *str, char *token);
 
 stnode_t *
-stnode_new_unparsed(const char *str);
+stnode_new_unparsed(const char *str, char *token);
 
 stnode_t *
-stnode_new_charconst(const char *str);
+stnode_new_literal(const char *str, char *token);
+
+stnode_t *
+stnode_new_charconst(unsigned long number, char *token);
 
 stnode_t*
 stnode_dup(const stnode_t *org);
@@ -121,16 +127,10 @@ void
 stnode_clear(stnode_t *node);
 
 void
-stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data);
+stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data, char *token);
 
 void
 stnode_replace(stnode_t *node, sttype_id_t type_id, gpointer data);
-
-void
-stnode_replace_string(stnode_t *node, const char *str);
-
-void
-stnode_replace_unparsed(stnode_t *node, const char *str);
 
 void
 stnode_free(stnode_t *node);
@@ -161,15 +161,31 @@ void
 stnode_set_inside_parens(stnode_t *node, gboolean inside);
 
 void
+log_node_full(enum ws_log_level level,
+			const char *file, int line, const char *func,
+			stnode_t *node, const char *msg);
+
+void
 log_test_full(enum ws_log_level level,
 			const char *file, int line, const char *func,
 			stnode_t *node, const char *msg);
 
 #ifdef WS_DISABLE_DEBUG
+#define log_node(node) (void)0;
 #define log_test(node) (void)0;
+#define LOG_NODE(node) (void)0;
 #else
+#define log_node(node) \
+	log_node_full(LOG_LEVEL_NOISY, __FILE__, __LINE__, __func__, node, #node)
 #define log_test(node) \
 	log_test_full(LOG_LEVEL_NOISY, __FILE__, __LINE__, __func__, node, #node)
+#define LOG_NODE(node) \
+	do { \
+		if (stnode_type_id(node) == STTYPE_TEST) \
+			log_test(node);			\
+		else					\
+			log_node(node);			\
+	} while (0)
 #endif
 
 void

@@ -73,9 +73,6 @@
        </item>
        <item>
         <widget class="QLineEdit" name="goToLineEdit">
-         <property name="inputMask">
-          <string>900000000</string>
-         </property>
         </widget>
        </item>
        <item>
@@ -197,6 +194,7 @@
     <addaction name="menuFileExportPacketDissections"/>
     <addaction name="actionFileExportPacketBytes"/>
     <addaction name="actionFileExportPDU"/>
+    <addaction name="actionFileStripHeaders"/>
     <addaction name="actionFileExportTLSSessionKeys"/>
     <addaction name="menuFileExportObjects"/>
     <addaction name="separator"/>
@@ -220,9 +218,15 @@
     <property name="title">
      <string>&amp;Help</string>
     </property>
+    <property name="toolTipsVisible">
+     <bool>true</bool>
+    </property>
     <widget class="QMenu" name="menuHelpManualPages">
      <property name="title">
       <string>Manual pages</string>
+     </property>
+     <property name="toolTipsVisible">
+      <bool>true</bool>
      </property>
      <addaction name="actionHelpMPWireshark"/>
      <addaction name="actionHelpMPWireshark_Filter"/>
@@ -553,6 +557,14 @@
      </property>
     </widget>
     <addaction name="actionStatistics_REGISTER_STAT_GROUP_RSERPOOL"/>
+    <addaction name="menuSOMEIP"/>
+    <widget class="QMenu" name="menuSOMEIP">
+     <property name="title">
+      <string>SOME/IP</string>
+     </property>
+     <addaction name="actionStatisticsSOMEIPmessages"/>
+     <addaction name="actionStatisticsSOMEIPSDentries"/>
+    </widget>
    </widget>
    <widget class="QMenu" name="menuTelephony">
     <property name="title">
@@ -927,7 +939,7 @@
   </action>
   <action name="actionHelpWebsite">
    <property name="icon">
-    <iconset resource="../../image/stock_icons.qrc">
+    <iconset resource="../../resources/stock_icons.qrc">
      <normaloff>:/menu/help/wsicon16.png</normaloff>:/menu/help/wsicon16.png</iconset>
    </property>
    <property name="text">
@@ -946,7 +958,7 @@
   </action>
   <action name="actionHelpWiki">
    <property name="icon">
-    <iconset resource="../../image/stock_icons.qrc">
+    <iconset resource="../../resources/stock_icons.qrc">
      <normaloff>:/menu/help/wsicon16.png</normaloff>:/menu/help/wsicon16.png</iconset>
    </property>
    <property name="text">
@@ -971,7 +983,7 @@
   </action>
   <action name="actionHelpAsk">
    <property name="icon">
-    <iconset resource="../../image/stock_icons.qrc">
+    <iconset resource="../../resources/stock_icons.qrc">
      <normaloff>:/menu/help/wsicon-ask.png</normaloff>:/menu/help/wsicon-ask.png</iconset>
    </property>
    <property name="text">
@@ -1928,6 +1940,22 @@
     <string>Sametime statistics</string>
    </property>
   </action>
+   <action name="actionStatisticsSOMEIPmessages">
+     <property name="text">
+       <string>SOME/IP Messages</string>
+     </property>
+     <property name="toolTip">
+       <string>SOME/IP Message statistics</string>
+     </property>
+   </action>
+   <action name="actionStatisticsSOMEIPSDentries">
+   <property name="text">
+    <string>SOME/IP-SD Entries</string>
+   </property>
+   <property name="toolTip">
+    <string>SOME/IP-SD Entries statistics</string>
+   </property>
+  </action>
   <action name="actionTelephonyISUPMessages">
    <property name="text">
     <string>&amp;ISUP Messages</string>
@@ -2092,6 +2120,14 @@
   <action name="actionFileExportPDU">
    <property name="text">
     <string>Export PDUs to File…</string>
+   </property>
+  </action>
+  <action name="actionFileStripHeaders">
+   <property name="text">
+    <string>Strip Headers…</string>
+   </property>
+   <property name="toolTip">
+    <string>Strip headers and export higher level encapsulations to file</string>
    </property>
   </action>
   <action name="actionStatisticsIOGraph">
@@ -3052,7 +3088,7 @@
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="../../image/stock_icons.qrc"/>
+  <include location="../../resources/stock_icons.qrc"/>
  </resources>
  <connections>
   <connection>

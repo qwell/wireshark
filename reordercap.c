@@ -84,7 +84,7 @@ frame_write(FrameRecord_t *frame, wtap *wth, wtap_dumper *pdh,
     int    err;
     gchar  *err_info;
 
-    DEBUG_PRINT("\nDumping frame (offset=%" G_GINT64_MODIFIER "u)\n",
+    DEBUG_PRINT("\nDumping frame (offset=%" PRIu64 ")\n",
                 frame->offset);
 
 
@@ -207,7 +207,7 @@ main(int argc, char *argv[])
     ws_log_parse_args(&argc, argv, vcmdarg_err, INVALID_OPTION);
 
     /* Initialize the version information. */
-    ws_init_version_info("Reordercap (Wireshark)", NULL, NULL, NULL);
+    ws_init_version_info("Reordercap", NULL, NULL);
 
     /*
      * Get credential information for later use.
@@ -357,7 +357,7 @@ main(int argc, char *argv[])
     g_ptr_array_free(frames, TRUE);
 
     /* Close outfile */
-    if (!wtap_dump_close(pdh, &err, &err_info)) {
+    if (!wtap_dump_close(pdh, NULL, &err, &err_info)) {
         cfile_close_failure_message(outfile, err, err_info);
         wtap_dump_params_cleanup(&params);
         ret = OUTPUT_FILE_ERROR;

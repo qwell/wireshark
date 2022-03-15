@@ -1,4 +1,4 @@
-/* packet.h
+/** @file
  * Definitions for packet disassembly structures and routines
  *
  * Wireshark - Network traffic analyzer
@@ -10,6 +10,7 @@
 
 #ifndef __PACKET_H__
 #define __PACKET_H__
+#include <wireshark.h>
 
 #include <wiretap/wtap_opttypes.h>
 #include "proto.h"
@@ -22,8 +23,6 @@
 #include "guid-utils.h"
 #include "tfs.h"
 #include "unit_strings.h"
-#include "ws_symbol_export.h"
-#include "wsutil/glib-compat.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -755,7 +754,7 @@ extern void free_data_sources(packet_info *pinfo);
  * if the user does a File->Save-As of only the Displayed packets and the
  * current frame passed the display filter.
  */
-WS_DLL_PUBLIC void mark_frame_as_depended_upon(packet_info *pinfo, guint32 frame_num);
+WS_DLL_PUBLIC void mark_frame_as_depended_upon(frame_data *fd, guint32 frame_num);
 
 /* Structure passed to the frame dissector */
 typedef struct frame_data_s

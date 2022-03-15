@@ -1,4 +1,5 @@
-/*
+/** @file
+ *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 2001 Gerald Combs
@@ -56,6 +57,7 @@ typedef struct {
 
 typedef struct {
 	char *value;
+	unsigned long number;
 } df_lval_t;
 
 static inline df_lval_t *
@@ -64,19 +66,27 @@ df_lval_new(void)
 	return g_new0(df_lval_t, 1);
 }
 
-static inline const char *
+static inline char *
 df_lval_value(df_lval_t *lval)
 {
 	if (!lval || !lval->value)
-		return "(fixme: null)";
+		return NULL;
 	return lval->value;
 }
 
+static inline unsigned long
+df_lval_number(df_lval_t *lval)
+{
+	return lval->number;
+}
+
 static inline void
-df_lval_free(df_lval_t *lval)
+df_lval_free(df_lval_t *lval, gboolean free_value)
 {
 	if (lval) {
-		g_free(lval->value);
+		if (free_value) {
+			g_free(lval->value);
+		}
 		g_free(lval);
 	}
 }
@@ -101,9 +111,6 @@ void
 dfilter_fail_throw(dfwork_t *dfw, long code, const char *format, ...) G_GNUC_PRINTF(3, 4);
 
 void
-dfilter_fail_parse(dfwork_t *dfw, const char *format, ...) G_GNUC_PRINTF(2, 3);
-
-void
 add_deprecated_token(dfwork_t *dfw, const char *token);
 
 void
@@ -112,8 +119,11 @@ free_deprecated(GPtrArray *deprecated);
 void
 DfilterTrace(FILE *TraceFILE, char *zTracePrompt);
 
-stnode_t *
-dfilter_resolve_unparsed(dfwork_t *dfw, stnode_t *node);
+header_field_info *
+dfilter_resolve_unparsed(dfwork_t *dfw, const char *name);
+
+char *
+dfilter_literal_normalized(const char *token);
 
 const char *tokenstr(int token);
 

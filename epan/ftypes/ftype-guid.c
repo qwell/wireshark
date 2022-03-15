@@ -67,13 +67,13 @@ get_guid(const char *s, e_guid_t *guid)
 }
 
 static gboolean
-guid_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
+guid_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
 {
      e_guid_t guid;
 
     if (!get_guid(s, &guid)) {
         if (err_msg != NULL)
-            *err_msg = g_strdup_printf("\"%s\" is not a valid GUID.", s);
+            *err_msg = ws_strdup_printf("\"%s\" is not a valid GUID.", s);
         return FALSE;
     }
 
@@ -104,8 +104,9 @@ ftype_register_guid(void)
         GUID_LEN,            /* wire_size */
         NULL,                /* new_value */
         NULL,                /* free_value */
-        guid_from_unparsed,  /* val_from_unparsed */
+        guid_from_literal,   /* val_from_literal */
         NULL,                /* val_from_string */
+        NULL,                /* val_from_charconst */
         guid_to_repr,        /* val_to_string_repr */
 
         { .set_value_guid = guid_fvalue_set_guid }, /* union set_value */

@@ -44,11 +44,16 @@ dfwork_t *global_dfw;
 void
 dfilter_vfail(dfwork_t *dfw, const char *format, va_list args)
 {
+	/* Flag a syntax error. This is currently only used in
+	 * the grammar parsing stage to terminate the parsing
+	 * loop. */
+	dfw->syntax_error = TRUE;
+
 	/* If we've already reported one error, don't overwite it */
 	if (dfw->error_message != NULL)
 		return;
 
-	dfw->error_message = g_strdup_vprintf(format, args);
+	dfw->error_message = ws_strdup_vprintf(format, args);
 }
 
 void
@@ -72,48 +77,44 @@ dfilter_fail_throw(dfwork_t *dfw, long code, const char *format, ...)
 	THROW(code);
 }
 
-void
-dfilter_fail_parse(dfwork_t *dfw, const char *format, ...)
-{
-	va_list	args;
-
-	va_start(args, format);
-	dfilter_vfail(dfw, format, args);
-	va_end(args);
-	dfw->syntax_error = TRUE;
-}
-
 /*
  * Tries to convert an STTYPE_UNPARSED to a STTYPE_FIELD. If it's not registered as
  * a field pass UNPARSED to the semantic check.
  */
-stnode_t *
-dfilter_resolve_unparsed(dfwork_t *dfw, stnode_t *node)
+header_field_info *
+dfilter_resolve_unparsed(dfwork_t *dfw, const char *name)
 {
-	const char *name;
 	header_field_info *hfinfo;
 
-	ws_assert(stnode_type_id(node) == STTYPE_UNPARSED);
-
-	name = stnode_data(node);
+	if (*name == '.')
+		name += 1;
 
 	hfinfo = proto_registrar_get_byname(name);
 	if (hfinfo != NULL) {
 		/* It's a field name */
-		stnode_replace(node, STTYPE_FIELD, hfinfo);
-		return node;
+		return hfinfo;
 	}
 
 	hfinfo = proto_registrar_get_byalias(name);
 	if (hfinfo != NULL) {
 		/* It's an aliased field name */
 		add_deprecated_token(dfw, name);
-		stnode_replace(node, STTYPE_FIELD, hfinfo);
-		return node;
+		return hfinfo;
 	}
 
 	/* It's not a field. */
-	return node;
+	return NULL;
+}
+
+char *
+dfilter_literal_normalized(const char *token)
+{
+	if (*token == '<') {
+		char *end = strchr(token, '>');
+		return g_strndup(token + 1, end - (token + 1));
+	}
+
+	return g_strdup(token);
 }
 
 /* Initialize the dfilter module */
@@ -268,8 +269,10 @@ const char *tokenstr(int token)
 	switch (token) {
 		case TOKEN_TEST_AND:	return "TEST_AND";
 		case TOKEN_TEST_OR: 	return "TEST_OR";
-		case TOKEN_TEST_EQ:	return "TEST_EQ";
-		case TOKEN_TEST_NE:	return "TEST_NE";
+		case TOKEN_TEST_ALL_EQ:	return "TEST_ALL_EQ";
+		case TOKEN_TEST_ANY_EQ:	return "TEST_ANY_EQ";
+		case TOKEN_TEST_ALL_NE:	return "TEST_ALL_NE";
+		case TOKEN_TEST_ANY_NE:	return "TEST_ANY_NE";
 		case TOKEN_TEST_LT:	return "TEST_LT";
 		case TOKEN_TEST_LE:	return "TEST_LE";
 		case TOKEN_TEST_GT:	return "TEST_GT";
@@ -281,18 +284,20 @@ const char *tokenstr(int token)
 		case TOKEN_STRING:	return "STRING";
 		case TOKEN_CHARCONST:	return "CHARCONST";
 		case TOKEN_UNPARSED:	return "UNPARSED";
+		case TOKEN_LITERAL:	return "LITERAL";
+		case TOKEN_IDENTIFIER:	return "IDENTIFIER";
 		case TOKEN_LBRACKET:	return "LBRACKET";
 		case TOKEN_RBRACKET:	return "RBRACKET";
 		case TOKEN_COMMA:	return "COMMA";
+		case TOKEN_RANGE:	return "RANGE";
 		case TOKEN_TEST_IN:	return "TEST_IN";
 		case TOKEN_LBRACE:	return "LBRACE";
 		case TOKEN_RBRACE:	return "RBRACE";
 		case TOKEN_DOTDOT:	return "DOTDOT";
 		case TOKEN_LPAREN:	return "LPAREN";
 		case TOKEN_RPAREN:	return "RPAREN";
-		default:		return "<unknown>";
 	}
-	ws_assert_not_reached();
+	return "<unknown>";
 }
 
 void
@@ -362,7 +367,7 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 	ws_noisy("Expanded text: %s", expanded_text);
 
 	if (df_lex_init(&scanner) != 0) {
-		dfw->error_message = g_strdup_printf("Can't initialize scanner: %s", g_strerror(errno));
+		dfw->error_message = ws_strdup_printf("Can't initialize scanner: %s", g_strerror(errno));
 		goto FAILURE;
 	}
 
@@ -408,7 +413,7 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 	/* If we created a df_lval_t but didn't use it, free it; the
 	 * parser doesn't know about it and won't free it for us. */
 	if (df_lval) {
-		df_lval_free(df_lval);
+		df_lval_free(df_lval, TRUE);
 		df_lval = NULL;
 	}
 

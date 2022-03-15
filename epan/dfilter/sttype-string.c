@@ -40,15 +40,6 @@ sttype_register_string(void)
 		string_tostr
 	};
 
-	static sttype_t charconst_type = {
-		STTYPE_CHARCONST,
-		"CHARCONST",
-		NULL,
-		string_free,
-		string_dup,
-		string_tostr
-	};
-
 	static sttype_t unparsed_type = {
 		STTYPE_UNPARSED,
 		"UNPARSED",
@@ -58,9 +49,18 @@ sttype_register_string(void)
 		string_tostr
 	};
 
+	static sttype_t literal_type = {
+		STTYPE_LITERAL,
+		"LITERAL",
+		NULL,
+		string_free,
+		string_dup,
+		string_tostr
+	};
+
 	sttype_register(&string_type);
-	sttype_register(&charconst_type);
 	sttype_register(&unparsed_type);
+	sttype_register(&literal_type);
 }
 
 /*

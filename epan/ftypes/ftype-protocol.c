@@ -78,7 +78,7 @@ val_from_string(fvalue_t *fv, const char *s, gchar **err_msg _U_)
 }
 
 static gboolean
-val_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
+val_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
 {
 	GByteArray *bytes;
 	tvbuff_t *new_tvb;
@@ -89,7 +89,45 @@ val_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_,
 	fv->value.protocol.proto_string = NULL;
 
 	/* Does this look like a byte string? */
-	bytes = byte_array_from_unparsed(s, err_msg);
+	bytes = byte_array_from_literal(s, err_msg);
+	if (bytes != NULL) {
+		/* Make a tvbuff from the bytes */
+		new_tvb = tvb_new_real_data(bytes->data, bytes->len, bytes->len);
+
+		/* Let the tvbuff know how to delete the data. */
+		tvb_set_free_cb(new_tvb, g_free);
+
+		/* Free GByteArray, but keep data. */
+		g_byte_array_free(bytes, FALSE);
+
+		/* And let us know that we need to free the tvbuff */
+		fv->tvb_is_private = TRUE;
+		fv->value.protocol.tvb = new_tvb;
+
+		/* This "field" is a value, it has no protocol description, but
+		 * we might compare it to a protocol with NULL tvb.
+		 * (e.g., proto_expert) */
+		fv->value.protocol.proto_string = g_strdup("");
+		return TRUE;
+	}
+
+	/* Not a byte array, forget about it. */
+	return FALSE;
+}
+
+static gboolean
+val_from_charconst(fvalue_t *fv, unsigned long num, gchar **err_msg)
+{
+	GByteArray *bytes;
+	tvbuff_t *new_tvb;
+
+	/* Free up the old value, if we have one */
+	value_free(fv);
+	fv->value.protocol.tvb = NULL;
+	fv->value.protocol.proto_string = NULL;
+
+	/* Does this look like a byte string? */
+	bytes = byte_array_from_charconst(num, err_msg);
 	if (bytes != NULL) {
 		/* Make a tvbuff from the bytes */
 		new_tvb = tvb_new_real_data(bytes->data, bytes->len, bytes->len);
@@ -253,9 +291,9 @@ cmp_matches(const fvalue_t *fv, const ws_regex_t *regex)
 		if (a->tvb != NULL) {
 			tvb_len = tvb_captured_length(a->tvb);
 			data = (const char *)tvb_get_ptr(a->tvb, 0, tvb_len);
-			rc = ws_regex_matches(regex, data, tvb_len);
+			rc = ws_regex_matches_length(regex, data, tvb_len);
 		} else {
-			rc = ws_regex_matches(regex, a->proto_string, -1);
+			rc = ws_regex_matches(regex, a->proto_string);
 		}
 	}
 	CATCH_ALL {
@@ -276,8 +314,9 @@ ftype_register_tvbuff(void)
 		0,				/* wire_size */
 		value_new,			/* new_value */
 		value_free,			/* free_value */
-		val_from_unparsed,		/* val_from_unparsed */
+		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
+		val_from_charconst,		/* val_from_charconst */
 		val_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_protocol = value_set },	/* union set_value */

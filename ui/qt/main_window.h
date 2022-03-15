@@ -1,4 +1,4 @@
-/* main_window.h
+/** @file
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -59,6 +59,7 @@
 #include <QMainWindow>
 #include <QPointer>
 #include <QSplitter>
+#include <QTextCodec>
 
 #ifdef _WIN32
 # include <QTimer>
@@ -311,6 +312,10 @@ signals:
     void selectRtpStream(rtpstream_id_t *id);
     void deselectRtpStream(rtpstream_id_t *id);
 
+#ifdef HAVE_LIBPCAP
+    void showExtcapOptions(QString &device_name, bool startCaptureOnClose);
+#endif
+
 public slots:
     // in main_window_slots.cpp
     /**
@@ -485,6 +490,7 @@ private slots:
     void on_actionFilePrint_triggered();
 
     void on_actionFileExportPDU_triggered();
+    void on_actionFileStripHeaders_triggered();
     void on_actionFileExportTLSSessionKeys_triggered();
 
     void actionEditCopyTriggered(MainWindow::CopySelected selection_type);
@@ -684,6 +690,8 @@ private slots:
     void actionStatisticsPlugin_triggered();
     void on_actionStatisticsHpfeeds_triggered();
     void on_actionStatisticsHTTP2_triggered();
+    void on_actionStatisticsSOMEIPmessages_triggered();
+    void on_actionStatisticsSOMEIPSDentries_triggered();
 
     RtpStreamDialog *openTelephonyRtpStreamsDialog();
     RtpPlayerDialog *openTelephonyRtpPlayerDialog();
@@ -726,7 +734,7 @@ private slots:
     void on_actionContextFilterFieldReference_triggered();
 
     void extcap_options_finished(int result);
-    void showExtcapOptionsDialog(QString & device_name);
+    void showExtcapOptionsDialog(QString & device_name, bool startCaptureOnClose);
 
     QString findRtpStreams(QVector<rtpstream_id_t *> *stream_ids, bool reverse);
 

@@ -278,6 +278,7 @@ static gint ett_ntlmssp_NTLM_REMOTE_SUPPLEMENTAL_CREDENTIAL = -1;
 static expert_field ei_ntlmssp_v2_key_too_long = EI_INIT;
 static expert_field ei_ntlmssp_blob_len_too_long = EI_INIT;
 static expert_field ei_ntlmssp_target_info_attr = EI_INIT;
+static expert_field ei_ntlmssp_target_info_invalid = EI_INIT;
 static expert_field ei_ntlmssp_message_type = EI_INIT;
 static expert_field ei_ntlmssp_auth_nthash = EI_INIT;
 static expert_field ei_ntlmssp_sessionbasekey = EI_INIT;
@@ -314,6 +315,9 @@ typedef struct _ntlmssp_packet_info {
   gboolean  payload_decrypted;
   gboolean  verifier_decrypted;
 } ntlmssp_packet_info;
+
+static int
+dissect_ntlmssp_verf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_);
 
 #ifdef DEBUG_NTLMSSP
 static void printnbyte(const guint8* tab, int nb, const char* txt, const char* txt2)
@@ -522,7 +526,7 @@ get_md4pass_list(wmem_allocator_t *pool
 
   if (memcmp(nt_password_hash, gbl_zeros, NTLMSSP_KEY_LEN) != 0) {
     memcpy(pass_list[i].md4, nt_password_hash, NTLMSSP_KEY_LEN);
-    g_snprintf(pass_list[i].key_origin, NTLMSSP_MAX_ORIG_LEN,
+    snprintf(pass_list[i].key_origin, NTLMSSP_MAX_ORIG_LEN,
                "<Global NT Password>");
     i = 1;
   }
@@ -1384,24 +1388,24 @@ static tif_t ntlmssp_ntlmv2_response_tif = {
 
 /** See [MS-NLMP] 2.2.2.1 */
 static int
-dissect_ntlmssp_target_info_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
+dissect_ntlmssp_target_info_list(tvbuff_t *_tvb, packet_info *pinfo, proto_tree *tree,
                                  guint32 target_info_offset, guint16 target_info_length,
                                  tif_t *tif_p)
 {
-  guint32 item_offset;
+  tvbuff_t *tvb = tvb_new_subset_length(_tvb, target_info_offset, target_info_length);
+  guint32 item_offset = 0;
   guint16 item_type = ~0;
-  guint16 item_length;
 
   /* Now enumerate through the individual items in the list */
-  item_offset = target_info_offset;
 
-  while (item_offset < (target_info_offset + target_info_length) && (item_type != NTLM_TARGET_INFO_END)) {
+  while (tvb_bytes_exist(tvb, item_offset, 4) && (item_type != NTLM_TARGET_INFO_END)) {
     proto_item   *target_info_tf;
     proto_tree   *target_info_tree;
     guint32       content_offset;
     guint16       content_length;
     guint32       type_offset;
     guint32       len_offset;
+    guint32       item_length;
     const guint8 *text = NULL;
 
     int **hf_array_p = tif_p->hf_attr_array_p;
@@ -1417,6 +1421,13 @@ dissect_ntlmssp_target_info_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     /* Content value */
     content_offset = len_offset + 2;
     item_length    = content_length + 4;
+
+    if (!tvb_bytes_exist(tvb, item_offset, item_length)) {
+        /* Mark the current item and all the rest as invalid */
+        proto_tree_add_expert(tree, pinfo, &ei_ntlmssp_target_info_invalid,
+                              tvb, item_offset, target_info_length - item_offset);
+        return target_info_offset + target_info_length;
+    }
 
     target_info_tree = proto_tree_add_subtree_format(tree, tvb, item_offset, item_length, *tif_p->ett, &target_info_tf,
                                   "Attribute: %s", val_to_str_ext(item_type, &ntlm_name_types_ext, "Unknown (%d)"));
@@ -1459,7 +1470,7 @@ dissect_ntlmssp_target_info_list(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     item_offset += item_length;
   }
 
-  return item_offset;
+  return target_info_offset + item_offset;
 }
 
 /** See [MS-NLMP] 3.3.2 */
@@ -1504,11 +1515,6 @@ dissect_ntlmv2_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int
   offset += 4;
 
   offset = dissect_ntlmssp_target_info_list(tvb, pinfo, ntlmv2_tree, offset, len - (offset - orig_offset), &ntlmssp_ntlmv2_response_tif);
-
-  if ((offset - orig_offset) < len) {
-    proto_tree_add_item(ntlmv2_tree, hf_ntlmssp_ntlmv2_response_z, tvb, offset, 4, ENC_NA);
-    offset += 4;
-  }
 
   if ((offset - orig_offset) < len) {
     proto_tree_add_item(ntlmv2_tree, hf_ntlmssp_ntlmv2_response_pad, tvb, offset, len - (offset - orig_offset), ENC_NA);
@@ -2045,8 +2051,12 @@ dissect_ntlmssp_auth (tvbuff_t *tvb, packet_info *pinfo, int offset,
   /* If there are more bytes before the data block dissect a version field
      if NTLMSSP_NEGOTIATE_VERSION is set in the flags (see MS-NLMP) */
   if (offset < data_start) {
-    if (negotiate_flags & NTLMSSP_NEGOTIATE_VERSION)
+    if (negotiate_flags & NTLMSSP_NEGOTIATE_VERSION) {
       offset = dissect_ntlmssp_version(tvb, offset, ntlmssp_tree);
+    } else {
+      proto_tree_add_item(ntlmssp_tree, hf_ntlmssp_ntlmv2_response_z, tvb, offset, 8, ENC_NA);
+      offset += 8;
+    }
   }
 
   /* If there are still more bytes before the data block dissect an MIC (message integrity_code) field */
@@ -2368,6 +2378,16 @@ dissect_ntlmssp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
   proto_item           *tf, *type_item;
   ntlmssp_header_t     *ntlmssph;
 
+  /* Check if it is a signing signature */
+  if (tvb_bytes_exist(tvb, offset, 16) &&
+      tvb_reported_length_remaining(tvb, offset) == 16 &&
+      tvb_get_guint8(tvb, offset) == 0x01)
+  {
+      tvbuff_t *verf_tvb = tvb_new_subset_length(tvb, offset, 16);
+      offset += dissect_ntlmssp_verf(verf_tvb, pinfo, tree, NULL);
+      return offset;
+  }
+
   ntlmssph = wmem_new(wmem_packet_scope(), ntlmssp_header_t);
   ntlmssph->type = 0;
   ntlmssph->domain_name = NULL;
@@ -2397,7 +2417,7 @@ dissect_ntlmssp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
   TRY {
     /* NTLMSSP constant */
     proto_tree_add_item (ntlmssp_tree, hf_ntlmssp_auth,
-                         tvb, offset, 8, ENC_ASCII|ENC_NA);
+                         tvb, offset, 8, ENC_ASCII);
     offset += 8;
 
     /* NTLMSSP Message Type */
@@ -2518,7 +2538,7 @@ decrypt_verifier(tvbuff_t *tvb, int offset, guint32 encrypted_block_length,
       /*if (!(NTLMSSP_NEGOTIATE_KEY_EXCH & packet_ntlmssp_info->flags)) {*/
       if (conv_ntlmssp_info->flags & NTLMSSP_NEGOTIATE_EXTENDED_SECURITY) {
         if ((NTLMSSP_NEGOTIATE_KEY_EXCH & conv_ntlmssp_info->flags)) {
-          /* The spec says that if we have have a key exchange then we have a the signature that is crypted
+          /* The spec says that if we have a key exchange then we have the signature that is crypted
            * otherwise it's just a hmac_md5(keysign, concat(message, sequence))[0..7]
            */
           if (gcry_cipher_decrypt(rc4_handle, packet_ntlmssp_info->verifier, 8, NULL, 0)) {
@@ -3568,6 +3588,7 @@ proto_register_ntlmssp(void)
      { &ei_ntlmssp_v2_key_too_long, { "ntlmssp.v2_key_too_long", PI_UNDECODED, PI_WARN, "NTLM v2 key is too long", EXPFILL }},
      { &ei_ntlmssp_blob_len_too_long, { "ntlmssp.blob.length.too_long", PI_UNDECODED, PI_WARN, "Session blob length too long", EXPFILL }},
      { &ei_ntlmssp_target_info_attr, { "ntlmssp.target_info_attr.unknown", PI_UNDECODED, PI_WARN, "unknown NTLMSSP Target Info Attribute", EXPFILL }},
+     { &ei_ntlmssp_target_info_invalid, { "ntlmssp.target_info_attr.invalid", PI_UNDECODED, PI_WARN, "invalid NTLMSSP Target Info AvPairs", EXPFILL }},
      { &ei_ntlmssp_message_type, { "ntlmssp.messagetype.unknown", PI_PROTOCOL, PI_WARN, "Unrecognized NTLMSSP Message", EXPFILL }},
      { &ei_ntlmssp_auth_nthash, { "ntlmssp.authenticated", PI_SECURITY, PI_CHAT, "Authenticated NTHASH", EXPFILL }},
      { &ei_ntlmssp_sessionbasekey, { "ntlmssp.sessionbasekey", PI_SECURITY, PI_CHAT, "SessionBaseKey", EXPFILL }},

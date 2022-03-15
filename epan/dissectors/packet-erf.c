@@ -1853,7 +1853,7 @@ static void dissect_host_anchor_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree
     proto_tree *subtree;
 
     /* TODO: top level linking to most recent frame like we have for Host ID? */
-    subtree = proto_tree_add_subtree_format(tree, tvb, 0, 0, ett_erf_anchor, &pi, "Host ID: 0x%012" G_GINT64_MODIFIER "x, Anchor ID: 0x%012" G_GINT64_MODIFIER "x", host_id & ERF_EHDR_HOST_ID_MASK, anchor_id & ERF_EHDR_ANCHOR_ID_MASK);
+    subtree = proto_tree_add_subtree_format(tree, tvb, 0, 0, ett_erf_anchor, &pi, "Host ID: 0x%012" PRIx64 ", Anchor ID: 0x%012" PRIx64, host_id & ERF_EHDR_HOST_ID_MASK, anchor_id & ERF_EHDR_ANCHOR_ID_MASK);
     proto_item_set_generated(pi);
 
     pi = proto_tree_add_uint64(subtree, hf_erf_anchor_hostid, tvb, 0, 0, host_id & ERF_EHDR_HOST_ID_MASK);
@@ -1879,7 +1879,7 @@ static void dissect_host_anchor_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree
         proto_item_set_generated(pi);
         /* XXX: Need to do this each time because pinfo is discarded. Filtering does not reset visited as it does not do a full redissect.
         We also might not catch all frames in the first pass (e.g. comment after record). */
-        mark_frame_as_depended_upon(pinfo, anchored_info->frame_num);
+        mark_frame_as_depended_upon(pinfo->fd, anchored_info->frame_num);
       }
       frame = wmem_list_frame_next(frame);
     }
@@ -1907,12 +1907,12 @@ dissect_host_id_source_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
 
     if (fnum_current != G_MAXUINT32) {
       pi = proto_tree_add_uint_format(tree, hf_erf_source_current, tvb, 0, 0, fnum_current,
-          "Host ID: 0x%012" G_GINT64_MODIFIER "x, Source ID: %u", host_id, source_id&0xFF);
+          "Host ID: 0x%012" PRIx64 ", Source ID: %u", host_id, source_id&0xFF);
       hostid_tree = proto_item_add_subtree(pi, ett_erf_source);
     } else {
       /* If we have no frame number to link against, just add a static subtree */
       hostid_tree = proto_tree_add_subtree_format(tree, tvb, 0, 0, ett_erf_source, &pi,
-          "Host ID: 0x%012" G_GINT64_MODIFIER "x, Source ID: %u", host_id, source_id&0xFF);
+          "Host ID: 0x%012" PRIx64 ", Source ID: %u", host_id, source_id&0xFF);
     }
     proto_item_set_generated(pi);
 
@@ -1925,12 +1925,12 @@ dissect_host_id_source_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, g
       pi = proto_tree_add_uint(hostid_tree, hf_erf_source_next, tvb, 0, 0, fnum_next);
       proto_item_set_generated(pi);
       /* XXX: Save the surrounding nearest periodic records when we do a filtered save so we keep native ERF metadata */
-      mark_frame_as_depended_upon(pinfo, fnum_next);
+      mark_frame_as_depended_upon(pinfo->fd, fnum_next);
     }
     if (fnum != G_MAXUINT32) {
       pi = proto_tree_add_uint(hostid_tree, hf_erf_source_prev, tvb, 0, 0, fnum);
       proto_item_set_generated(pi);
-      mark_frame_as_depended_upon(pinfo, fnum);
+      mark_frame_as_depended_upon(pinfo->fd, fnum);
     }
   }
 }
@@ -2775,8 +2775,8 @@ dissect_meta_record_tags(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
       case ERF_META_TAG_if_speed:
       case ERF_META_TAG_if_tx_speed:
         value64 = tvb_get_ntoh64(tvb, offset + 4);
-        tmp = format_size((gint64) value64, (format_size_flags_e)(format_size_unit_bits_s|format_size_prefix_si));
-        tag_pi = proto_tree_add_uint64_format_value(section_tree, tag_info->hf_value, tvb, offset + 4, taglength, value64, "%s (%" G_GINT64_MODIFIER "u bps)", tmp, value64);
+        tmp = format_size((int64_t)value64, FORMAT_SIZE_UNIT_BITS_S, FORMAT_SIZE_PREFIX_SI);
+        tag_pi = proto_tree_add_uint64_format_value(section_tree, tag_info->hf_value, tvb, offset + 4, taglength, value64, "%s (%" PRIu64 " bps)", tmp, value64);
         g_free(tmp);
         break;
 
@@ -2806,8 +2806,8 @@ dissect_meta_record_tags(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
 
       case ERF_META_TAG_mem:
         value64 = tvb_get_ntoh64(tvb, offset + 4);
-        tmp = format_size((gint64) value64, (format_size_flags_e)(format_size_unit_bytes|format_size_prefix_iec));
-        tag_pi = proto_tree_add_uint64_format_value(section_tree, tag_info->hf_value, tvb, offset + 4, taglength, value64, "%s (%" G_GINT64_MODIFIER"u bytes)", tmp, value64);
+        tmp = format_size((int64_t)value64, FORMAT_SIZE_UNIT_BYTES, FORMAT_SIZE_PREFIX_IEC);
+        tag_pi = proto_tree_add_uint64_format_value(section_tree, tag_info->hf_value, tvb, offset + 4, taglength, value64, "%s (%" PRIu64" bytes)", tmp, value64);
         g_free(tmp);
         break;
 

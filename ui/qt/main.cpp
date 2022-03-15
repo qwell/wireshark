@@ -207,90 +207,65 @@ wireshark_cmdarg_err_cont(const char *fmt, va_list ap)
     fprintf(stderr, "\n");
 }
 
-// xxx based from ../gtk/main.c:get_gtk_compiled_info
 void
-get_wireshark_qt_compiled_info(GString *str)
+gather_wireshark_qt_compiled_info(feature_list l)
 {
-    g_string_append(str, "with ");
-    g_string_append_printf(str,
 #ifdef QT_VERSION
-                    "Qt %s", QT_VERSION_STR);
+    with_feature(l, "Qt %s", QT_VERSION_STR);
 #else
-                    "Qt (version unknown)");
+    with_feature(l, "Qt (version unknown)");
 #endif
-
-    /* Capture libraries */
-    g_string_append(str, ", ");
-    get_compiled_caplibs_version(str);
-}
-
-// xxx copied from ../gtk/main.c
-void
-get_gui_compiled_info(GString *str)
-{
-    epan_get_compiled_version_info(str);
-
-    g_string_append(str, ", ");
+    gather_caplibs_compile_info(l);
+    epan_gather_compile_info(l);
 #ifdef QT_MULTIMEDIA_LIB
-    g_string_append(str, "with QtMultimedia");
+    with_feature(l, "QtMultimedia");
 #else
-    g_string_append(str, "without QtMultimedia");
+    without_feature(l, "QtMultimedia");
 #endif
 
-    g_string_append(str, ", ");
     const char *update_info = software_update_info();
     if (update_info) {
-        g_string_append_printf(str, "with automatic updates using %s", update_info);
+        with_feature(l, "automatic updates using %s", update_info);
     } else {
-        g_string_append_printf(str, "without automatic updates");
+        without_feature(l, "automatic updates");
     }
-
 #ifdef _WIN32
-    g_string_append(str, ", ");
 #ifdef HAVE_AIRPCAP
-    get_compiled_airpcap_version(str);
+    gather_airpcap_compile_info(l);
 #else
-    g_string_append(str, "without AirPcap");
+    without_feature(l, "AirPcap");
 #endif
 #endif /* _WIN32 */
-
 #ifdef HAVE_SPEEXDSP
-    g_string_append(str, ", with SpeexDSP (using system library)");
+    with_feature(l, "SpeexDSP (using system library)");
 #else
-    g_string_append(str, ", with SpeexDSP (using bundled resampler)");
+    with_feature(l, "SpeexDSP (using bundled resampler)");
 #endif
 
 #ifdef HAVE_MINIZIP
-    g_string_append(str, ", with Minizip");
+    with_feature(l, "Minizip");
 #else
-    g_string_append(str, ", without Minizip");
+    without_feature(l, "Minizip");
 #endif
 }
 
-// xxx copied from ../gtk/main.c
 void
-get_wireshark_runtime_info(GString *str)
+gather_wireshark_runtime_info(feature_list l)
 {
-    g_string_append_printf(str, ", with Qt %s", qVersion());
-
+    with_feature(l, "Qt %s", qVersion());
 #ifdef HAVE_LIBPCAP
-    /* Capture libraries */
-    g_string_append(str, ", ");
-    get_runtime_caplibs_version(str);
+    gather_caplibs_runtime_info(l);
 #endif
-
-    /* stuff used by libwireshark */
-    epan_get_runtime_version_info(str);
+    epan_gather_runtime_info(l);
 
 #ifdef HAVE_AIRPCAP
-    g_string_append(str, ", ");
-    get_runtime_airpcap_version(str);
+    gather_airpcap_runtime_info(l);
 #endif
 
     if (wsApp) {
         // Display information
         const char *display_mode = ColorUtils::themeIsDark() ? "dark" : "light";
-        g_string_append_printf(str, ", with %s display mode", display_mode);
+        with_feature(l, "%s display mode", display_mode);
 
         int hidpi_count = 0;
         foreach (QScreen *screen, wsApp->screens()) {
@@ -299,11 +274,11 @@ get_wireshark_runtime_info(GString *str)
             }
         }
         if (hidpi_count == wsApp->screens().count()) {
-            g_string_append(str, ", with HiDPI");
+            with_feature(l, "HiDPI");
         } else if (hidpi_count) {
-            g_string_append(str, ", with mixed DPI");
+            with_feature(l, "mixed DPI");
         } else {
-            g_string_append(str, ", without HiDPI");
+            without_feature(l, "HiDPI");
         }
     }
 }
@@ -520,6 +495,8 @@ int main(int argc, char *qt_argv[])
 
     /* Initialize log handler early so we can have proper logging during startup. */
     ws_log_init_with_writer("wireshark", console_log_writer, vcmdarg_err);
+    /* For backward compatibility with GLib logging and Wireshark 3.4. */
+    ws_log_console_writer_set_use_stdout(TRUE);
 
     qInstallMessageHandler(qt_log_message_handler);
 
@@ -636,8 +613,8 @@ int main(int argc, char *qt_argv[])
 #endif /* _WIN32 */
 
     /* Get the compile-time version information string */
-    ws_init_version_info("Wireshark", get_wireshark_qt_compiled_info,
-                         get_gui_compiled_info, get_wireshark_runtime_info);
+    ws_init_version_info("Wireshark", gather_wireshark_qt_compiled_info,
+                         gather_wireshark_runtime_info);
 
     /* Create the user profiles directory */
     if (create_profiles_dir(&rf_path) == -1) {
@@ -739,7 +716,7 @@ int main(int argc, char *qt_argv[])
     }
 
 #ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "set_console_log_handler, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "set_console_log_handler, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
 
 #ifdef HAVE_LIBPCAP
@@ -759,7 +736,7 @@ int main(int argc, char *qt_argv[])
 
     splash_update(RA_DISSECTORS, NULL, NULL);
 #ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling epan init, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling epan init, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
     /* Register all dissectors; we must do this before checking for the
        "-G" flag, as the "-G" flag dumps information registered by the
@@ -773,7 +750,7 @@ int main(int argc, char *qt_argv[])
 #ifdef DEBUG_STARTUP_TIME
     /* epan_init resets the preferences */
     prefs.gui_console_open = console_open_always;
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "epan done, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "epan done, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
 
     /* Register all audio codecs. */
@@ -792,7 +769,7 @@ int main(int argc, char *qt_argv[])
 
     splash_update(RA_LISTENERS, NULL, NULL);
 #ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Register all tap listeners, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Register all tap listeners, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
     /* Register all tap listeners; we do this before we parse the arguments,
        as the "-z" argument can specify a registered tap. */
@@ -810,13 +787,13 @@ int main(int argc, char *qt_argv[])
     }
 
 #ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling extcap_register_preferences, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling extcap_register_preferences, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
     splash_update(RA_EXTCAP, NULL, NULL);
     extcap_register_preferences();
     splash_update(RA_PREFERENCES, NULL, NULL);
 #ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling module preferences, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling module preferences, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
 
     global_commandline_info.prefs_p = ws_app.readConfigurationFiles(false);
@@ -838,7 +815,7 @@ int main(int argc, char *qt_argv[])
 
 #ifdef HAVE_LIBPCAP
 #ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
     splash_update(RA_INTERFACES, NULL, NULL);
 
@@ -881,7 +858,7 @@ int main(int argc, char *qt_argv[])
             interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
 #ifdef HAVE_PCAP_REMOTE
             if (interface_opts->auth_type == CAPTURE_AUTH_PWD) {
-                auth_str = g_strdup_printf("%s:%s", interface_opts->auth_username, interface_opts->auth_password);
+                auth_str = ws_strdup_printf("%s:%s", interface_opts->auth_username, interface_opts->auth_password);
             }
 #endif
             caps = capture_get_if_capabilities(interface_opts->name, interface_opts->monitor_mode,
@@ -915,7 +892,7 @@ int main(int argc, char *qt_argv[])
        changed either from one of the preferences file or from the command
        line that their preferences have changed. */
 #ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling prefs_apply_all, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling prefs_apply_all, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
     prefs_apply_all();
     prefs_to_capture_opts();
@@ -961,7 +938,7 @@ int main(int argc, char *qt_argv[])
     }
 
     wsApp->allSystemsGo();
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_MESSAGE, "Wireshark is up and ready to go, elapsed time %.3fs", (float) (g_get_monotonic_time() - start_time) / 1000000);
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Wireshark is up and ready to go, elapsed time %.3fs", (float) (g_get_monotonic_time() - start_time) / 1000000);
     SimpleDialog::displayQueuedMessages(main_w);
 
     /* User could specify filename, or display filter, or both */
