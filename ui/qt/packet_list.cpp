@@ -245,7 +245,7 @@ PacketList::PacketList(QWidget *parent) :
 {
     setItemsExpandable(false);
     setRootIsDecorated(false);
-    setSortingEnabled(true);
+    setSortingEnabled(prefs.gui_packet_list_sortable);
     setUniformRowHeights(true);
     setAccessibleName("Packet list");
 
@@ -284,6 +284,7 @@ PacketList::PacketList(QWidget *parent) :
     connect(packet_list_model_, SIGNAL(itemHeightChanged(const QModelIndex&)), this, SLOT(updateRowHeights(const QModelIndex&)));
     connect(wsApp, SIGNAL(addressResolutionChanged()), this, SLOT(redrawVisiblePacketsDontSelectCurrent()));
     connect(wsApp, SIGNAL(columnDataChanged()), this, SLOT(redrawVisiblePacketsDontSelectCurrent()));
+    connect(wsApp, &WiresharkApplication::preferencesChanged, this, [=]() { setSortingEnabled(prefs.gui_packet_list_sortable); });
 
     connect(header(), SIGNAL(sectionResized(int,int,int)),
             this, SLOT(sectionResized(int,int,int)));
@@ -1986,7 +1987,8 @@ void PacketList::drawNearOverlay()
     qreal dp_ratio = overlay_sb_->devicePixelRatio();
     int o_height = overlay_sb_->height() * dp_ratio;
     int o_rows = qMin(packet_list_model_->rowCount(), o_height);
-    int o_width = (wsApp->fontMetrics().height() * 2 * dp_ratio) + 2; // 2ems + 1-pixel border on either side.
+    QFontMetricsF fmf(wsApp->font());
+    int o_width = ((static_cast<int>(fmf.height())) * 2 * dp_ratio) + 2; // 2ems + 1-pixel border on either side.
 
     if (recent.packet_list_colorize && o_rows > 0) {
         QImage overlay(o_width, o_height, QImage::Format_ARGB32_Premultiplied);
@@ -2096,7 +2098,7 @@ void PacketList::drawFarOverlay()
         overlay.fill(Qt::transparent);
 
         QColor tick_color = palette().text().color();
-        tick_color.setAlphaF(0.3);
+        tick_color.setAlphaF(0.3f);
         painter.setPen(tick_color);
 
         for (int row = 0; row < pl_rows; row++) {

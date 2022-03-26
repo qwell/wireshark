@@ -115,12 +115,13 @@ ftype_register_double(void)
 		{ .get_value_floating = value_get_floating },	/* union get_value */
 
 		cmp_order,
-		NULL,				/* cmp_bitwise_and */
 		NULL,				/* cmp_contains */
 		NULL,				/* cmp_matches */
 
+		NULL,				/* is_zero */
 		NULL,
 		NULL,
+		NULL,				/* bitwise_and */
 	};
 
 	static ftype_t double_type = {
@@ -139,12 +140,13 @@ ftype_register_double(void)
 		{ .get_value_floating = value_get_floating },	/* union get_value */
 
 		cmp_order,
-		NULL,				/* cmp_bitwise_and */
 		NULL,				/* cmp_contains */
 		NULL,				/* cmp_matches */
 
+		NULL,				/* is_zero */
 		NULL,
 		NULL,
+		NULL,				/* bitwise_and */
 	};
 
 	ftype_register(FT_FLOAT, &float_type);

@@ -1182,13 +1182,17 @@ ws_find_package(Systemd BUILD_sdjournal HAVE_SYSTEMD)
 if(BUILD_wireshark)
 	if(USE_qt6)
 		set(qtver "6")
+		if(DEFINED ENV{WIRESHARK_QT6_PREFIX_PATH})
+			set(CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT6_PREFIX_PATH})
+		endif()
 	else()
 		set(qtver "5")
-	endif()
-	# We used to recommend setting QT5_BASE_DIR and should probably deprecate this at some point.
-	if(WIN32)
-		set(QT5_BASE_PATH "$ENV{QT5_BASE_DIR}")
-		set(CMAKE_PREFIX_PATH "${QT5_BASE_PATH}")
+		# XXX We used to recommend setting QT5_BASE_DIR. Remove after the 4.0 branch is created.
+		if(WIN32 AND DEFINED ENV{QT5_BASE_DIR})
+			message(WARNING "Support for QT5_BASE_DIR will be removed in a future release.")
+			set(QT5_BASE_PATH "$ENV{QT5_BASE_DIR}")
+			set(CMAKE_PREFIX_PATH "${QT5_BASE_PATH}")
+		endif()
 	endif()
 	if(APPLE AND EXISTS /usr/local/opt/qt5)
 		# Homebrew installs Qt5 (up to at least 5.11.0) in
@@ -1298,6 +1302,10 @@ ws_find_package(BCG729 ENABLE_BCG729 HAVE_BCG729)
 ws_find_package(ILBC ENABLE_ILBC HAVE_ILBC)
 
 ws_find_package(OPUS ENABLE_OPUS HAVE_OPUS)
+
+# libsinsp+libscap, required for falco-bridge
+ws_find_package(Sinsp ENABLE_SINSP HAVE_SINSP)
+
 
 # CMake 3.9 and below used 'LIBXML2_LIBRARIES' as the name of the cache entry
 # storing the find_library result. Transfer it to the new cache variable such
@@ -1540,6 +1548,7 @@ add_subdirectory( epan )
 add_subdirectory( extcap )
 add_subdirectory( randpkt_core )
 add_subdirectory( tools/lemon )
+add_subdirectory( tools/radiotap-gen )
 add_subdirectory( ui )
 add_subdirectory( wiretap )
 add_subdirectory( writecap )
@@ -1602,6 +1611,11 @@ if(ENABLE_PLUGINS)
 		plugins/codecs/l16_mono
 		${CUSTOM_PLUGIN_SRC_DIR}
 	)
+	if(SINSP_FOUND)
+		list(APPEND PLUGIN_SRC_DIRS
+			plugins/epan/falco_bridge
+		)
+	endif()
 	if(SPANDSP_FOUND)
 		list(APPEND PLUGIN_SRC_DIRS
 			plugins/codecs/G722
@@ -1813,6 +1827,11 @@ set_package_properties(PCRE2 PROPERTIES
 	URL "https://www.pcre.org"
 	DESCRIPTION "Regular expression pattern matching using the same syntax and semantics as Perl 5"
 	PURPOSE "Support for regular expressions"
+)
+set_package_properties(Sinsp PROPERTIES
+	DESCRIPTION "libsinsp and libscap"
+	URL "https://github.com/falcosecurity/libs/"
+	PURPOSE "Support for Falco plugins"
 )
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" _build_type)
@@ -2271,7 +2290,7 @@ set (_dtds_data_files)
 set (_dtds_dep_files)
 foreach(_data_file ${_dtds_src_files})
 	list(APPEND _dtds_data_files ${DATAFILE_DIR}/${_data_file})
-	list(APPEND _dtds_dep_files ${_protocol_data_dir})
+	list(APPEND _dtds_dep_files ${_protocol_data_dir}/${_data_file})
 endforeach()
 
 add_custom_command(
@@ -2340,7 +2359,7 @@ set (_protobuf_data_files)
 set (_protobuf_dep_files)
 foreach(_data_file ${_protobuf_src_files})
 	list(APPEND _protobuf_data_files ${DATAFILE_DIR}/${_data_file})
-	list(APPEND _protobuf_data_files ${_protocol_data_dir}/${_data_file})
+	list(APPEND _protobuf_dep_files ${_protocol_data_dir}/${_data_file})
 endforeach()
 
 add_custom_command(

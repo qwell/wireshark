@@ -832,11 +832,30 @@ void MainWindow::captureFileClosed() {
 // ui/gtk/capture_dlg.c:start_capture_confirmed
 
 void MainWindow::startCapture() {
+    startCapture(QStringList());
+}
+
+void MainWindow::startCapture(QStringList interfaces _U_) {
 #ifdef HAVE_LIBPCAP
     interface_options *interface_opts;
     guint i;
     interface_t *device;
     gboolean can_start_capture = TRUE;
+
+    if (interfaces.count() > 0) {
+        global_capture_opts.num_selected = 0;
+        for (i = 0; i < global_capture_opts.all_ifaces->len; i++) {
+            device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
+
+            if (interfaces.contains(device->name)) {
+                device->selected = TRUE;
+                global_capture_opts.num_selected++;
+            }
+            else {
+                device->selected = FALSE;
+            }
+        }
+    }
 
     /* did the user ever select a capture interface before? */
     if (global_capture_opts.num_selected == 0) {
@@ -1195,7 +1214,7 @@ void MainWindow::setEditCommentsMenu()
     }
     if (selectedRows().count() > 1) {
         main_ui_->menuPacketComment->addSeparator();
-        main_ui_->menuPacketComment->addAction(tr("Delete comments from %n packet(s)", nullptr, selectedRows().count()), this, SLOT(actionDeleteCommentsFromPackets()));
+        main_ui_->menuPacketComment->addAction(tr("Delete comments from %n packet(s)", nullptr, static_cast<int>(selectedRows().count())), this, SLOT(actionDeleteCommentsFromPackets()));
     }
 }
 
@@ -1287,8 +1306,8 @@ void MainWindow::setMenusForSelectedPacket()
         }
     }
 
-    main_ui_->actionEditMarkPacket->setText(tr("&Mark/Unmark Packet(s)", "", selectedRows().count()));
-    main_ui_->actionEditIgnorePacket->setText(tr("&Ignore/Unignore Packet(s)", "", selectedRows().count()));
+    main_ui_->actionEditMarkPacket->setText(tr("&Mark/Unmark Packet(s)", "", static_cast<int>(selectedRows().count())));
+    main_ui_->actionEditIgnorePacket->setText(tr("&Ignore/Unignore Packet(s)", "", static_cast<int>(selectedRows().count())));
 
     main_ui_->actionCopyListAsText->setEnabled(selectedRows().count() > 0);
     main_ui_->actionCopyListAsCSV->setEnabled(selectedRows().count() > 0);
@@ -1495,7 +1514,7 @@ void MainWindow::startInterfaceCapture(bool valid, const QString capture_filter)
     if (testCaptureFileClose(before_what)) {
         // The interface tree will update the selected interfaces via its timer
         // so no need to do anything here.
-        startCapture();
+        startCapture(QStringList());
     }
 }
 
@@ -3964,7 +3983,7 @@ void MainWindow::on_actionCaptureStart_triggered()
     /* XXX - will closing this remove a temporary file? */
     QString before_what(tr(" before starting a new capture"));
     if (testCaptureFileClose(before_what)) {
-        startCapture();
+        startCapture(QStringList());
     } else {
         // simply clicking the button sets it to 'checked' even though we've
         // decided to do nothing, so undo that
@@ -3986,7 +4005,7 @@ void MainWindow::on_actionCaptureRestart_triggered()
     if (!testCaptureFileClose(before_what, Restart))
         return;
 
-    startCapture();
+    startCapture(QStringList());
 #endif // HAVE_LIBPCAP
 }
 
@@ -4116,7 +4135,7 @@ void MainWindow::extcap_options_finished(int result)
     if (result == QDialog::Accepted) {
         QString before_what(tr(" before starting a new capture"));
         if (testCaptureFileClose(before_what)) {
-            startCapture();
+            startCapture(QStringList());
         }
     }
     this->welcome_page_->getInterfaceFrame()->interfaceListChanged();
@@ -4235,21 +4254,21 @@ void MainWindow::activatePluginIFToolbar(bool)
     }
 }
 
-void MainWindow::rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *> stream_ids)
+void MainWindow::rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *> stream_ids _U_)
 {
 #ifdef QT_MULTIMEDIA_LIB
     openTelephonyRtpPlayerDialog()->replaceRtpStreams(stream_ids);
 #endif
 }
 
-void MainWindow::rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *> stream_ids)
+void MainWindow::rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *> stream_ids _U_)
 {
 #ifdef QT_MULTIMEDIA_LIB
     openTelephonyRtpPlayerDialog()->addRtpStreams(stream_ids);
 #endif
 }
 
-void MainWindow::rtpPlayerDialogRemoveRtpStreams(QVector<rtpstream_id_t *> stream_ids)
+void MainWindow::rtpPlayerDialogRemoveRtpStreams(QVector<rtpstream_id_t *> stream_ids _U_)
 {
 #ifdef QT_MULTIMEDIA_LIB
     openTelephonyRtpPlayerDialog()->removeRtpStreams(stream_ids);

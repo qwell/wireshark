@@ -12,8 +12,6 @@
 #include <ftypes-int.h>
 #include <string.h>
 
-#define CMP_MATCHES cmp_matches
-
 #include <strutil.h>
 #include <wsutil/ws_assert.h>
 
@@ -103,6 +101,12 @@ val_from_charconst(fvalue_t *fv, unsigned long num, gchar **err_msg)
 	return TRUE;
 }
 
+static gboolean
+string_is_zero(const fvalue_t *fv)
+{
+	return fv->value.string == NULL || strlen(fv->value.string) == 0;
+}
+
 static guint
 len(fvalue_t *fv)
 {
@@ -175,12 +179,13 @@ ftype_register_string(void)
 		{ .get_value_ptr = value_get },	/* union get_value */
 
 		cmp_order,
-		NULL,				/* cmp_bitwise_and */
 		cmp_contains,
-		CMP_MATCHES,
+		cmp_matches,
 
+		string_is_zero,			/* is_zero */
 		len,
 		slice,
+		NULL,				/* bitwise_and */
 	};
 	static ftype_t stringz_type = {
 		FT_STRINGZ,			/* ftype */
@@ -198,12 +203,13 @@ ftype_register_string(void)
 		{ .get_value_ptr = value_get },	/* union get_value */
 
 		cmp_order,
-		NULL,				/* cmp_bitwise_and */
 		cmp_contains,			/* cmp_contains */
-		CMP_MATCHES,
+		cmp_matches,
 
+		string_is_zero,			/* is_zero */
 		len,
 		slice,
+		NULL,				/* bitwise_and */
 	};
 	static ftype_t uint_string_type = {
 		FT_UINT_STRING,		/* ftype */
@@ -221,12 +227,13 @@ ftype_register_string(void)
 		{ .get_value_ptr = value_get },	/* union get_value */
 
 		cmp_order,
-		NULL,				/* cmp_bitwise_and */
 		cmp_contains,			/* cmp_contains */
-		CMP_MATCHES,
+		cmp_matches,
 
+		string_is_zero,			/* is_zero */
 		len,
 		slice,
+		NULL,				/* bitwise_and */
 	};
 	static ftype_t stringzpad_type = {
 		FT_STRINGZPAD,			/* ftype */
@@ -244,12 +251,13 @@ ftype_register_string(void)
 		{ .get_value_ptr = value_get },	/* union get_value */
 
 		cmp_order,
-		NULL,				/* cmp_bitwise_and */
 		cmp_contains,			/* cmp_contains */
-		CMP_MATCHES,
+		cmp_matches,
 
+		string_is_zero,			/* is_zero */
 		len,
 		slice,
+		NULL,				/* bitwise_and */
 	};
 	static ftype_t stringztrunc_type = {
 		FT_STRINGZTRUNC,		/* ftype */
@@ -267,12 +275,13 @@ ftype_register_string(void)
 		{ .get_value_ptr = value_get },	/* union get_value */
 
 		cmp_order,
-		NULL,				/* cmp_bitwise_and */
 		cmp_contains,			/* cmp_contains */
-		CMP_MATCHES,
+		cmp_matches,
 
+		string_is_zero,			/* is_zero */
 		len,
 		slice,
+		NULL,				/* bitwise_and */
 	};
 
 	ftype_register(FT_STRING, &string_type);

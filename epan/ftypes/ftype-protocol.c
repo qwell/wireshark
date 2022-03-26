@@ -17,22 +17,18 @@
 #include <epan/exceptions.h>
 #include <wsutil/ws_assert.h>
 
-#define CMP_MATCHES cmp_matches
-
-#define tvb_is_private	fvalue_gboolean1
-
 static void
 value_new(fvalue_t *fv)
 {
 	fv->value.protocol.tvb = NULL;
 	fv->value.protocol.proto_string = NULL;
-	fv->tvb_is_private = FALSE;
+	fv->value.protocol.tvb_is_private = FALSE;
 }
 
 static void
 value_free(fvalue_t *fv)
 {
-	if (fv->value.protocol.tvb && fv->tvb_is_private) {
+	if (fv->value.protocol.tvb && fv->value.protocol.tvb_is_private) {
 		tvb_free_chain(fv->value.protocol.tvb);
 	}
 	g_free(fv->value.protocol.proto_string);
@@ -68,7 +64,7 @@ val_from_string(fvalue_t *fv, const char *s, gchar **err_msg _U_)
 	tvb_set_free_cb(new_tvb, g_free);
 
 	/* And let us know that we need to free the tvbuff */
-	fv->tvb_is_private = TRUE;
+	fv->value.protocol.tvb_is_private = TRUE;
 	/* This "field" is a value, it has no protocol description, but
 	 * we might compare it to a protocol with NULL tvb.
 	 * (e.g., proto_expert) */
@@ -101,7 +97,7 @@ val_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, 
 		g_byte_array_free(bytes, FALSE);
 
 		/* And let us know that we need to free the tvbuff */
-		fv->tvb_is_private = TRUE;
+		fv->value.protocol.tvb_is_private = TRUE;
 		fv->value.protocol.tvb = new_tvb;
 
 		/* This "field" is a value, it has no protocol description, but
@@ -139,7 +135,7 @@ val_from_charconst(fvalue_t *fv, unsigned long num, gchar **err_msg)
 		g_byte_array_free(bytes, FALSE);
 
 		/* And let us know that we need to free the tvbuff */
-		fv->tvb_is_private = TRUE;
+		fv->value.protocol.tvb_is_private = TRUE;
 		fv->value.protocol.tvb = new_tvb;
 
 		/* This "field" is a value, it has no protocol description, but
@@ -303,6 +299,13 @@ cmp_matches(const fvalue_t *fv, const ws_regex_t *regex)
 	return rc;
 }
 
+static gboolean
+is_zero(const fvalue_t *fv)
+{
+	const protocol_value_t *a = &fv->value.protocol;
+	return a->tvb == NULL && a->proto_string == NULL;
+}
+
 void
 ftype_register_tvbuff(void)
 {
@@ -323,13 +326,13 @@ ftype_register_tvbuff(void)
 		{ .get_value_ptr = value_get },		/* union get_value */
 
 		cmp_order,
-		NULL,				/* cmp_bitwise_and */
 		cmp_contains,
-		CMP_MATCHES,
+		cmp_matches,
 
+		is_zero,
 		len,
 		slice,
-
+		NULL,
 	};
 
 

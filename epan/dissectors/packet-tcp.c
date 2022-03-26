@@ -3292,6 +3292,149 @@ print_tcp_fragment_tree(fragment_head *ipfd_head, proto_tree *tree, proto_tree *
 #define TCPH_MIN_LEN            20
 
 /* Desegmentation of TCP streams */
+
+/* The primary ID is the first frame of a multisegment PDU, which is
+ * most likely unique in the capture (unlike sequence numbers which
+ * can be re-used, especially when relative sequence numbers are enabled).
+ * However, frames can have multiple PDUs with certain encapsulations like
+ * GSE or MPE over DVB BaseBand Frames.
+ */
+typedef struct _tcp_segment_key {
+        address src_addr;
+        address dst_addr;
+        guint32 src_port;
+        guint32 dst_port;
+        guint32 id;  /* msp->first_frame */
+        guint32 seq; /* msp->seq */
+} tcp_segment_key;
+
+static guint
+tcp_segment_hash(gconstpointer k)
+{
+        const tcp_segment_key* key = (const tcp_segment_key*) k;
+        guint hash_val;
+
+        hash_val = key->id;
+
+/*      In most captures there is only one fragment per id / first_frame,
+        so we only use it in the hash as an optimization.
+
+        int i;
+        for (i = 0; i < key->src.len; i++)
+                hash_val += key->src_addr.data[i];
+        for (i = 0; i < key->dst.len; i++)
+                hash_val += key->dst_addr.data[i];
+        hash_val += key->src_port;
+        hash_val += key->dst_port;
+        hash_val += key->seq;
+*/
+
+        return hash_val;
+}
+
+static gint
+tcp_segment_equal(gconstpointer k1, gconstpointer k2)
+{
+        const tcp_segment_key* key1 = (const tcp_segment_key*) k1;
+        const tcp_segment_key* key2 = (const tcp_segment_key*) k2;
+
+        /*
+         * key.id is the first item to compare since it's the item most
+         * likely to differ between sessions, thus short-circuiting
+         * the comparison of addresses and ports.
+         */
+        return (key1->id == key2->id) &&
+               (addresses_equal(&key1->src_addr, &key2->src_addr)) &&
+               (addresses_equal(&key1->dst_addr, &key2->dst_addr)) &&
+               (key1->src_port == key2->src_port) &&
+               (key1->dst_port == key2->dst_port) &&
+               (key1->seq == key2->seq);
+}
+
+/*
+ * Create a fragment key for temporary use; it can point to non-
+ * persistent data, and so must only be used to look up and
+ * delete entries, not to add them.
+ */
+static gpointer
+tcp_segment_temporary_key(const packet_info *pinfo, const guint32 id,
+                          const void *data)
+{
+        struct tcp_multisegment_pdu *msp = (struct tcp_multisegment_pdu*)data;
+        DISSECTOR_ASSERT(msp);
+        tcp_segment_key *key = g_slice_new(tcp_segment_key);
+
+        /*
+         * Do a shallow copy of the addresses.
+         */
+        copy_address_shallow(&key->src_addr, &pinfo->src);
+        copy_address_shallow(&key->dst_addr, &pinfo->dst);
+        key->src_port = pinfo->srcport;
+        key->dst_port = pinfo->destport;
+        key->id = id;
+        key->seq = msp->seq;
+
+        return (gpointer)key;
+}
+
+/*
+ * Create a fragment key for permanent use; it must point to persistent
+ * data, so that it can be used to add entries.
+ */
+static gpointer
+tcp_segment_persistent_key(const packet_info *pinfo,
+                           const guint32 id, const void *data)
+{
+        struct tcp_multisegment_pdu *msp = (struct tcp_multisegment_pdu*)data;
+        DISSECTOR_ASSERT(msp);
+        tcp_segment_key *key = g_slice_new(tcp_segment_key);
+
+        /*
+         * Do a deep copy of the addresses.
+         */
+        copy_address(&key->src_addr, &pinfo->src);
+        copy_address(&key->dst_addr, &pinfo->dst);
+        key->src_port = pinfo->srcport;
+        key->dst_port = pinfo->destport;
+        key->id = id;
+        key->seq = msp->seq;
+
+        return (gpointer)key;
+}
+
+static void
+tcp_segment_free_temporary_key(gpointer ptr)
+{
+        tcp_segment_key *key = (tcp_segment_key *)ptr;
+        g_slice_free(tcp_segment_key, key);
+}
+
+static void
+tcp_segment_free_persistent_key(gpointer ptr)
+{
+        tcp_segment_key *key = (tcp_segment_key *)ptr;
+
+        if(key){
+                /*
+                 * Free up the copies of the addresses from the old key.
+                 */
+                free_address(&key->src_addr);
+                free_address(&key->dst_addr);
+
+                g_slice_free(tcp_segment_key, key);
+        }
+}
+
+const reassembly_table_functions
+tcp_reassembly_table_functions = {
+        tcp_segment_hash,
+        tcp_segment_equal,
+        tcp_segment_temporary_key,
+        tcp_segment_persistent_key,
+        tcp_segment_free_temporary_key,
+        tcp_segment_free_persistent_key
+};
+
 static reassembly_table tcp_reassembly_table;
 
 /* functions to trace tcp segments */
@@ -3314,7 +3457,7 @@ missing_segments(packet_info *pinfo, struct tcp_multisegment_pdu *msp, guint32 s
         return FALSE;
     }
 
-    fd_head = fragment_get(&tcp_reassembly_table, pinfo, msp->first_frame, NULL);
+    fd_head = fragment_get(&tcp_reassembly_table, pinfo, msp->first_frame, msp);
     /* msp implies existence of fragments, this should never be NULL. */
     DISSECTOR_ASSERT(fd_head);
 
@@ -3372,6 +3515,64 @@ again:
      * If that's not the case, it will be set appropriately.
      */
     deseg_offset = offset;
+
+    /*
+     * TODO: Some notes on current limitations with TCP desegmentation:
+     *
+     * This function can be called with either relative or absolute sequence
+     * numbers; the ??_SEQ macros are called for comparisons to deal with
+     * with sequence number rollover. (With relative sequence numbers, if
+     * early TCP segments are received out of order before the SYN it can be
+     * possible for rollover to occur at the very beginning of a connection.)
+     *
+     * However, multi-segment PDU lookup does not work for MSPs that span
+     * TCP sequence number rollover, and desegmentation fails.
+     *
+     * When there is a single TCP connection that is longer than 4 GiB and
+     * thus sequence numbers are reused, multi-segment PDU lookup and
+     * retransmission identification does not work. (Bug 10503).
+     *
+     * Distinguishing between sequence number reuse on a very long connection
+     * and sequence number reuse due to retransmission is difficult. Right
+     * now very long connections are just not handled as the rarer case.
+     * Perhaps retransmission identification could be entirely left up to TCP
+     * analysis (if enabled, not done at all if disabled), instead of TCP
+     * analysis results only used to supplement work here?
+     *
+     * As mentioned below, TCP sequence analysis doesn't properly distinguish
+     * "retransmitted but with additional data", which causes that case to
+     * break if TCP analysis is enabled. (Bug 13523)
+     *
+     * If multiple TCP/IP packets are encapsulated in the same frame (such
+     * as with GSE, which has very long Baseband Frames) this causes issues:
+     *
+     * If a subdissector reports that it can handle a payload, but needs
+     * more data (pinfo->desegment_len > 0) and did not actually dissect
+     * any of it (pinfo->desegment_offset == 0), on the first pass it
+     * still adds layers to the frame. On subsequent passes, the MSP created
+     * (or extended) in the first pass means that the subdissector won't be
+     * called at all. If there are other protocols contained in the frame
+     * that are dissected on the second pass they will have different
+     * layer numbers than in the first pass, which can disturb proto_data
+     * lookup, reassembly, etc. (Bug 16109 describes this for TLS.)
+     *
+     * If out of order reassembly is enabled, the same problem as above
+     * occurs when an existing MSP with gaps can dissect at least one PDU
+     * (pinfo->desegment_offset > 0) but need more data for additional PDUs
+     * in the OOO MSP (pinfo->desegment_len > 0). Since MSP splitting is
+     * not supported, the earlier PDUs are processed by the subdissector
+     * twice on the first pass, and only in the later frame on subsequent
+     * passes, which affects layer numbers and various stored protocol
+     * data for both that subdissector and any other subdissectors in the
+     * frame. See test_tcp_out_of_order_twopass_with_bug() in
+     * test/suite_dissection.py
+     *
+     * If out of order reassembly is enabled, if an out of order segment
+     * is received, reassembly and dissection does not occur until all
+     * gaps are filled, even if segments are subsequently received that
+     * extend the contiguous stream and could be dissected. See the TODO
+     * in check_tcp_out_of_order() in test/suite_dissection.py
+     */
 
     if (tcpd) {
         /* Have we seen this PDU before (and is it the start of a multi-
@@ -3437,7 +3638,7 @@ again:
             /* Fix for bug 3264: look up ipfd for this (first) segment,
                so can add tcp.reassembled_in generated field on this code path. */
             if (!is_retransmission) {
-                ipfd_head = fragment_get(&tcp_reassembly_table, pinfo, msp->first_frame, NULL);
+                ipfd_head = fragment_get(&tcp_reassembly_table, pinfo, msp->first_frame, msp);
                 if (ipfd_head) {
                     if (ipfd_head->reassembled_in != 0) {
                         item = proto_tree_add_uint(tcp_tree, hf_tcp_reassembled_in, tvb, 0,
@@ -3587,12 +3788,12 @@ again:
              * have to worry about increasing the fragment length here.
              */
             fragment_reset_tot_len(&tcp_reassembly_table, pinfo,
-                                   msp->first_frame, NULL,
+                                   msp->first_frame, msp,
                                    MAX(seq + len, msp->nxtpdu) - msp->seq);
         }
 
         ipfd_head = fragment_add(&tcp_reassembly_table, tvb, offset,
-                                 pinfo, msp->first_frame, NULL,
+                                 pinfo, msp->first_frame, msp,
                                  seq - msp->seq, len,
                                  (LT_SEQ (nxtseq,msp->nxtpdu)) );
 
@@ -3740,7 +3941,7 @@ again:
                 if (pinfo->desegment_offset == 0)
                     remove_last_data_source(pinfo);
                 fragment_set_partial_reassembly(&tcp_reassembly_table,
-                                                pinfo, msp->first_frame, NULL);
+                                                pinfo, msp->first_frame, msp);
 
                 /* Update msp->nxtpdu to point to the new next
                  * pdu boundary.
@@ -3919,7 +4120,7 @@ again:
 
             /* add this segment as the first one for this new pdu */
             fragment_add(&tcp_reassembly_table, tvb, deseg_offset,
-                         pinfo, msp->first_frame, NULL,
+                         pinfo, msp->first_frame, msp,
                          0, nxtseq - deseg_seq,
                          LT_SEQ(nxtseq, msp->nxtpdu));
         }
@@ -7383,7 +7584,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                 fragment_head *ipfd_head;
 
                 ipfd_head = fragment_add(&tcp_reassembly_table, tvb, offset,
-                                         pinfo, msp->first_frame, NULL,
+                                         pinfo, msp->first_frame, msp,
                                          tcph->th_seq - msp->seq,
                                          tcph->th_seglen,
                                          FALSE );
@@ -8626,7 +8827,7 @@ proto_register_tcp(void)
 
     register_init_routine(tcp_init);
     reassembly_table_register(&tcp_reassembly_table,
-                          &addresses_ports_reassembly_table_functions);
+                          &tcp_reassembly_table_functions);
 
     register_decode_as(&tcp_da);
 

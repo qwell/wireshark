@@ -851,7 +851,7 @@ void RtpAnalysisDialog::saveCsvHeader(QFile *save_file, QTreeWidget *tree)
     foreach (QVariant v, row_data) {
         if (!v.isValid()) {
             values << "\"\"";
-        } else if ((int) v.type() == (int) QMetaType::QString) {
+        } else if (v.userType() == QMetaType::QString) {
             values << QString("\"%1\"").arg(v.toString());
         } else {
             values << v.toString();
@@ -871,7 +871,7 @@ void RtpAnalysisDialog::saveCsvData(QFile *save_file, QTreeWidget *tree)
         foreach (QVariant v, ra_ti->rowData()) {
             if (!v.isValid()) {
                 values << "\"\"";
-            } else if ((int) v.type() == (int) QMetaType::QString) {
+            } else if (v.userType() == QMetaType::QString) {
                 values << QString("\"%1\"").arg(v.toString());
             } else {
                 values << v.toString();
@@ -965,7 +965,11 @@ void RtpAnalysisDialog::graphClicked(QMouseEvent *event)
 {
     updateWidgets();
     if (event->button() == Qt::RightButton) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0 ,0)
+        graph_ctx_menu_.popup(event->globalPosition().toPoint());
+#else
         graph_ctx_menu_.popup(event->globalPos());
+#endif
     }
 }
 
@@ -1024,7 +1028,7 @@ void RtpAnalysisDialog::replaceRtpStreams(QVector<rtpstream_id_t *> stream_ids)
     std::lock_guard<std::mutex> lock(mutex_);
     // Delete existing tabs (from last to first)
     if (tabs_.count() > 0) {
-        for(int i=tabs_.count(); i>0; i--) {
+        for(int i = static_cast<int>(tabs_.count()); i>0; i--) {
             closeTab(i-1);
         }
     }
@@ -1091,7 +1095,7 @@ void RtpAnalysisDialog::removeRtpStreams(QVector<rtpstream_id_t *> stream_ids)
         for (int i = 0; i < tabs.size(); i++) {
             tab_info_t *tab = tabs.at(i);
             if (rtpstream_id_equal(&tab->stream.id, id, RTPSTREAM_ID_EQUAL_SSRC))  {
-                closeTab(tabs_.indexOf(tab));
+                closeTab(static_cast<int>(tabs_.indexOf(tab)));
             }
         }
     }

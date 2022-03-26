@@ -589,8 +589,8 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     connect(main_ui_->mainStack, SIGNAL(currentChanged(int)),
             this, SLOT(mainStackChanged(int)));
 
-    connect(welcome_page_, SIGNAL(startCapture()),
-            this, SLOT(startCapture()));
+    connect(welcome_page_, SIGNAL(startCapture(QStringList)),
+            this, SLOT(startCapture(QStringList)));
     connect(welcome_page_, SIGNAL(recentFileActivated(QString)),
             this, SLOT(openCaptureFile(QString)));
 
@@ -1077,7 +1077,7 @@ void MainWindow::dropEvent(QDropEvent *event)
     }
 
     /* merge the files in chronological order */
-    if (cf_merge_files_to_tempfile(this, global_capture_opts.temp_dir, &tmpname, local_files.size(),
+    if (cf_merge_files_to_tempfile(this, global_capture_opts.temp_dir, &tmpname, static_cast<int>(local_files.size()),
                                    in_filenames,
                                    wtap_pcapng_file_type_subtype(),
                                    FALSE) == CF_OK) {
@@ -2136,7 +2136,7 @@ void MainWindow::initMainToolbarIcons()
     main_ui_->actionViewColorizePacketList->setIcon(StockIcon("x-colorize-packets"));
 
     QList<QKeySequence> zi_seq = main_ui_->actionViewZoomIn->shortcuts();
-    zi_seq << QKeySequence(Qt::CTRL + Qt::Key_Equal);
+    zi_seq << QKeySequence(Qt::CTRL | Qt::Key_Equal);
     main_ui_->actionViewZoomIn->setIcon(StockIcon("zoom-in"));
     main_ui_->actionViewZoomIn->setShortcuts(zi_seq);
     main_ui_->actionViewZoomOut->setIcon(StockIcon("zoom-out"));

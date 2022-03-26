@@ -19,12 +19,10 @@
 /* Passed back to user */
 struct epan_dfilter {
 	GPtrArray	*insns;
-	GPtrArray	*consts;
 	guint		num_registers;
-	guint		max_registers;
-	GList		**registers;
+	GSList		**registers;
 	gboolean	*attempted_load;
-	gboolean	*owns_memory;
+	GDestroyNotify	*free_registers;
 	int		*interesting_fields;
 	int		num_interesting_fields;
 	GPtrArray	*deprecated;
@@ -36,13 +34,10 @@ typedef struct {
 	gboolean	syntax_error;
 	gchar		*error_message;
 	GPtrArray	*insns;
-	GPtrArray	*consts;
 	GHashTable	*loaded_fields;
 	GHashTable	*interesting_fields;
 	int		next_insn_id;
-	int		next_const_id;
 	int		next_register;
-	int		first_constant; /* first register used as a constant */
 	GPtrArray	*deprecated;
 } dfwork_t;
 
@@ -107,6 +102,7 @@ dfilter_vfail(dfwork_t *dfw, const char *format, va_list args);
 void
 dfilter_fail(dfwork_t *dfw, const char *format, ...) G_GNUC_PRINTF(2, 3);
 
+WS_NORETURN
 void
 dfilter_fail_throw(dfwork_t *dfw, long code, const char *format, ...) G_GNUC_PRINTF(3, 4);
 

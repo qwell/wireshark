@@ -190,6 +190,10 @@ WS_DLL_PUBLIC
 gboolean
 ftype_can_matches(enum ftenum ftype);
 
+WS_DLL_PUBLIC
+gboolean
+ftype_can_is_zero(enum ftenum ftype);
+
 /* ---------------- FVALUE ----------------- */
 
 #include <epan/ipv4.h>
@@ -204,6 +208,7 @@ typedef struct _protocol_value_t
 {
 	tvbuff_t	*tvb;
 	gchar		*proto_string;
+	gboolean	tvb_is_private;
 } protocol_value_t;
 
 typedef struct _fvalue_t {
@@ -226,11 +231,6 @@ typedef struct _fvalue_t {
 		guint16			sfloat_ieee_11073;
 		guint32			float_ieee_11073;
 	} value;
-
-	/* The following is provided for private use
-	 * by the fvalue. */
-	gboolean	fvalue_gboolean1;
-
 } fvalue_t;
 
 fvalue_t*
@@ -348,19 +348,22 @@ gboolean
 fvalue_le(const fvalue_t *a, const fvalue_t *b);
 
 gboolean
-fvalue_bitwise_and(const fvalue_t *a, const fvalue_t *b);
-
-gboolean
 fvalue_contains(const fvalue_t *a, const fvalue_t *b);
 
 gboolean
 fvalue_matches(const fvalue_t *a, const ws_regex_t *re);
+
+gboolean
+fvalue_is_zero(const fvalue_t *a);
 
 guint
 fvalue_length(fvalue_t *fv);
 
 fvalue_t*
 fvalue_slice(fvalue_t *fv, drange_t *dr);
+
+fvalue_t*
+fvalue_bitwise_and(const fvalue_t *a, const fvalue_t *b, gchar **err_msg);
 
 #ifdef __cplusplus
 }

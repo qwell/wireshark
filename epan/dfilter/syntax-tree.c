@@ -304,27 +304,28 @@ stnode_tostr(stnode_t *node, gboolean pretty)
 {
 	ws_assert_magic(node, STNODE_MAGIC);
 
-	if (pretty && node->repr_display != NULL)
-		return node->repr_display;
-
 	if (pretty && node->repr_token != NULL) {
+		g_free(node->repr_display);
 		if (stnode_type_id(node) == STTYPE_CHARCONST) {
-			return node->repr_token;
+			node->repr_display = g_strdup(node->repr_token);
 		}
-
-		node->repr_display = ws_strdup_printf("\"%s\"", node->repr_token);
+		else {
+			node->repr_display = ws_strdup_printf("\"%s\"", node->repr_token);
+		}
 		return node->repr_display;
 	}
 
-	if (!pretty && node->repr_debug != NULL)
-		return node->repr_debug;
-
 	char *str = _node_tostr(node, pretty);
 
-	if (pretty)
+	if (pretty) {
+		g_free(node->repr_display);
 		node->repr_display = str;
-	else
+	}
+	else {
+		g_free(node->repr_debug);
 		node->repr_debug = str;
+	}
+
 	return str;
 }
 
@@ -411,7 +412,8 @@ visit_tree(wmem_strbuf_t *buf, stnode_t *node, int level)
 {
 	stnode_t *left, *right;
 
-	if (stnode_type_id(node) == STTYPE_TEST) {
+	if (stnode_type_id(node) == STTYPE_TEST ||
+			stnode_type_id(node) == STTYPE_BITWISE) {
 		wmem_strbuf_append_printf(buf, "%s(", stnode_todebug(node));
 		sttype_test_get(node, NULL, &left, &right);
 		if (left && right) {
